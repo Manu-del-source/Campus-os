@@ -29,7 +29,7 @@ enforced in code and covered by tests.
 | SQL injection | Prisma parameterises all queries; the single raw statement (test truncation helper) uses no user input |
 | CSRF | Mutations run as POST-only Server Actions / route handlers with SameSite session cookies managed by Supabase SSR |
 | Secret exposure | Secrets are read through `serverEnv()` in server-only modules; only `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL` and the anon key are public |
-| Insecure file access | Documents will be stored in object storage with signed, expiring URLs issued after a server-side permission check; only metadata lives in PostgreSQL |
+| Insecure file access | Documents are stored in object storage with signed, expiring URLs issued after a server-side permission check; only metadata lives in PostgreSQL. Staff need `documents.read` **and** `students.read`. Learners never receive `documents.read`; they reach their own files through ownership. Probing another student's id or document returns 404, not 403 |
 | Replayed payment callbacks | The finance phase records a unique provider transaction reference per payment; callbacks are idempotent and never trusted without server-side verification against the provider |
 | Untrusted input | All external input is parsed with Zod before use (see `studentListQuerySchema`) |
 

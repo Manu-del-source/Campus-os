@@ -53,6 +53,13 @@ Schema: `prisma/schema.prisma`. Migrations: `prisma/migrations/`.
 | `Staff` | Staff number, category, employment status, department, campus, optional linked `User` |
 | `Student` | Full learner profile, programme/level/intake/cohort/group/campus, `StudentStatus` lifecycle |
 
+### Admissions (phase 2)
+| Model | Notes |
+| --- | --- |
+| `Application` | Public application; unique `(institutionId, reference)`; hashed access token |
+| `Admission` | Offer + registration link from an application to a `Student` |
+| `Document` | Metadata only (`storageKey`, checksum, visibility); bytes live in object storage |
+
 ### Audit
 | Model | Notes |
 | --- | --- |

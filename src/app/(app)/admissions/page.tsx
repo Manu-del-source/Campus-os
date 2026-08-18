@@ -1,54 +1,55 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-import { Badge } from '@/components/ui/badge';
+import { ApplicationStatusBadge } from '@/components/admissions/status-badge';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { DataTable, Td, Th } from '@/components/ui/table';
 import { requirePermission } from '@/lib/auth/session';
-import { listStudents, studentListQuerySchema } from '@/server/students/queries';
-import { formatNumber } from '@/lib/utils';
+import { formatDate, formatNumber } from '@/lib/utils';
+import { listApplications } from '@/server/admissions/queries';
+import { applicationListQuerySchema } from '@/server/admissions/schemas';
 
-export const metadata: Metadata = { title: 'Students' };
+export const metadata: Metadata = { title: 'Admissions' };
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }
 
-export default async function StudentsPage({ searchParams }: PageProps) {
-  const context = await requirePermission('students.read');
+export default async function AdmissionsPage({ searchParams }: PageProps) {
+  const context = await requirePermission('admissions.read');
   const params = await searchParams;
 
-  const parsed = studentListQuerySchema.safeParse({
+  const parsed = applicationListQuerySchema.safeParse({
     search: typeof params.search === 'string' ? params.search : undefined,
     status: typeof params.status === 'string' ? params.status : undefined,
     page: typeof params.page === 'string' ? params.page : undefined,
     pageSize: typeof params.pageSize === 'string' ? params.pageSize : undefined,
   });
 
-  const query = parsed.success ? parsed.data : studentListQuerySchema.parse({});
-  const result = await listStudents(context, query);
+  const query = parsed.success ? parsed.data : applicationListQuerySchema.parse({});
+  const result = await listApplications(context, query);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Students"
-        description={`${formatNumber(result.total)} learner record${result.total === 1 ? '' : 's'} in this institution.`}
+        title="Admissions"
+        description={`${formatNumber(result.total)} application${result.total === 1 ? '' : 's'} in this institution.`}
       />
 
       <Card>
         <form method="get" className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 sm:flex-row">
           <div className="flex-1 space-y-1.5">
             <label htmlFor="search" className="sr-only">
-              Search students
+              Search applications
             </label>
             <input
               id="search"
               name="search"
               type="search"
               defaultValue={query.search ?? ''}
-              placeholder="Search by name, student number or email"
+              placeholder="Search by name, email or reference"
               className="h-10 w-full rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm"
             />
           </div>
@@ -60,13 +61,13 @@ export default async function StudentsPage({ searchParams }: PageProps) {
               id="status"
               name="status"
               defaultValue={query.status ?? ''}
-              className="h-10 w-full rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm sm:w-48"
+              className="h-10 w-full rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm sm:w-52"
             >
               <option value="">All statuses</option>
-              {['APPLICANT', 'ADMITTED', 'ACTIVE', 'SUSPENDED', 'DEFERRED', 'COMPLETED', 'GRADUATED', 'WITHDRAWN', 'DISCONTINUED'].map(
+              {['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'OFFERED', 'ACCEPTED', 'REJECTED', 'WITHDRAWN'].map(
                 (status) => (
                   <option key={status} value={status}>
-                    {status.charAt(0) + status.slice(1).toLowerCase()}
+                    {status.replaceAll('_', ' ')}
                   </option>
                 ),
               )}
@@ -83,44 +84,40 @@ export default async function StudentsPage({ searchParams }: PageProps) {
         {result.rows.length === 0 ? (
           <div className="p-4">
             <EmptyState
-              title="No students match this view"
-              description="Adjust the filters, or register learners through admissions."
+              title="No applications match this view"
+              description="Public applicants appear here once they start an application for an open intake."
             />
           </div>
         ) : (
-          <DataTable caption="Students">
+          <DataTable caption="Applications">
             <thead>
               <tr>
-                <Th>Student</Th>
-                <Th>Number</Th>
+                <Th>Applicant</Th>
+                <Th>Reference</Th>
                 <Th className="hidden md:table-cell">Programme</Th>
-                <Th className="hidden lg:table-cell">Cohort</Th>
-                <Th className="hidden lg:table-cell">Group</Th>
+                <Th className="hidden lg:table-cell">Intake</Th>
+                <Th className="hidden lg:table-cell">Submitted</Th>
                 <Th>Status</Th>
               </tr>
             </thead>
             <tbody>
-              {result.rows.map((student) => (
-                <tr key={student.id}>
+              {result.rows.map((application) => (
+                <tr key={application.id}>
                   <Td>
                     <Link
-                      href={`/students/${student.id}`}
+                      href={`/admissions/${application.id}`}
                       className="font-medium text-[var(--color-accent)] underline-offset-4 hover:underline"
                     >
-                      {student.fullName}
+                      {application.fullName}
                     </Link>
-                    {student.email ? (
-                      <span className="block text-xs text-[var(--color-muted-foreground)]">{student.email}</span>
-                    ) : null}
+                    <span className="block text-xs text-[var(--color-muted-foreground)]">{application.email}</span>
                   </Td>
-                  <Td className="font-mono text-xs">{student.studentNumber}</Td>
-                  <Td className="hidden md:table-cell">{student.programmeName ?? '—'}</Td>
-                  <Td className="hidden lg:table-cell">{student.cohortCode ?? '—'}</Td>
-                  <Td className="hidden lg:table-cell">{student.groupCode ?? '—'}</Td>
+                  <Td className="font-mono text-xs">{application.reference}</Td>
+                  <Td className="hidden md:table-cell">{application.programmeName}</Td>
+                  <Td className="hidden lg:table-cell">{application.intakeCode}</Td>
+                  <Td className="hidden lg:table-cell">{formatDate(application.submittedAt)}</Td>
                   <Td>
-                    <Badge tone={student.status === 'ACTIVE' ? 'accent' : 'neutral'}>
-                      {student.status.toLowerCase()}
-                    </Badge>
+                    <ApplicationStatusBadge status={application.status} />
                   </Td>
                 </tr>
               ))}

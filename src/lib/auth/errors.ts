@@ -34,6 +34,18 @@ export class TenantAccessError extends Error {
   }
 }
 
+/**
+ * Raised for illegal workflow transitions and other domain-rule violations.
+ * Translated to HTTP 400 at the route/action boundary.
+ */
+export class DomainError extends Error {
+  readonly status = 400;
+  constructor(message = 'This action is not allowed in the current state.') {
+    super(message);
+    this.name = 'DomainError';
+  }
+}
+
 export function isAuthorizationError(
   error: unknown,
 ): error is UnauthenticatedError | ForbiddenError | TenantAccessError {
@@ -42,4 +54,8 @@ export function isAuthorizationError(
     error instanceof ForbiddenError ||
     error instanceof TenantAccessError
   );
+}
+
+export function isDomainError(error: unknown): error is DomainError {
+  return error instanceof DomainError;
 }

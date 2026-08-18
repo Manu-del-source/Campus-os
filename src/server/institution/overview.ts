@@ -16,6 +16,8 @@ export interface InstitutionOverview {
     students: number;
     activeStudents: number;
     applicants: number;
+    applications: number;
+    openApplications: number;
     staff: number;
     programmes: number;
     departments: number;
@@ -43,6 +45,8 @@ export async function getInstitutionOverview(context: AuthContext): Promise<Inst
     students,
     activeStudents,
     applicants,
+    applications,
+    openApplications,
     staff,
     programmes,
     departments,
@@ -55,6 +59,10 @@ export async function getInstitutionOverview(context: AuthContext): Promise<Inst
     prisma.student.count({ where: notDeleted }),
     prisma.student.count({ where: { ...notDeleted, status: 'ACTIVE' } }),
     prisma.student.count({ where: { ...notDeleted, status: 'APPLICANT' } }),
+    prisma.application.count({ where: scope }),
+    prisma.application.count({
+      where: { ...scope, status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'OFFERED'] } },
+    }),
     prisma.staff.count({ where: { ...notDeleted, employmentStatus: { in: ['ACTIVE', 'PROBATION'] } } }),
     prisma.programme.count({ where: { ...notDeleted, isActive: true } }),
     prisma.department.count({ where: { ...notDeleted, isActive: true } }),
@@ -87,7 +95,18 @@ export async function getInstitutionOverview(context: AuthContext): Promise<Inst
   ]);
 
   return {
-    counts: { students, activeStudents, applicants, staff, programmes, departments, cohorts, units },
+    counts: {
+      students,
+      activeStudents,
+      applicants,
+      applications,
+      openApplications,
+      staff,
+      programmes,
+      departments,
+      cohorts,
+      units,
+    },
     currentAcademicYear,
     openIntakes,
     recentStudents: recentStudents.map((student) => ({

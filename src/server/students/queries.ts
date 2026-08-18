@@ -2,7 +2,8 @@ import 'server-only';
 
 import { z } from 'zod';
 
-import { requirePermission, tenantWhere } from '@/lib/auth/authorization';
+import { hasPermission, requireAuthenticated, requirePermission, tenantWhere } from '@/lib/auth/authorization';
+import { TenantAccessError } from '@/lib/auth/errors';
 import type { AuthContext } from '@/lib/auth/types';
 import { prisma } from '@/lib/db';
 import type { Prisma, StudentStatus } from '@/generated/prisma/client';
@@ -108,21 +109,55 @@ export async function listStudents(
   };
 }
 
+const studentDetailInclude = {
+  programme: { select: { code: true, name: true } },
+  cohort: { select: { code: true, name: true } },
+  group: { select: { code: true, name: true } },
+  intake: { select: { code: true, name: true } },
+  level: { select: { code: true, name: true } },
+  campus: { select: { code: true, name: true } },
+  admission: {
+    select: {
+      id: true,
+      offerIssuedAt: true,
+      registeredAt: true,
+      application: { select: { id: true, reference: true, status: true } },
+    },
+  },
+} as const;
+
 /**
- * Single student lookup. The tenant filter is part of the query itself, so an
- * id belonging to another institution simply does not resolve (no IDOR).
+ * Single student lookup for staff. The tenant filter is part of the query
+ * itself, so an id belonging to another institution simply does not resolve.
  */
 export async function getStudentById(context: AuthContext, id: string) {
   requirePermission(context, 'students.read');
 
   return prisma.student.findFirst({
     where: { id, ...tenantWhere(context), deletedAt: null },
-    include: {
-      programme: { select: { code: true, name: true } },
-      cohort: { select: { code: true, name: true } },
-      group: { select: { code: true, name: true } },
-      intake: { select: { code: true, name: true } },
-      level: { select: { code: true, name: true } },
-    },
+    include: studentDetailInclude,
   });
+}
+
+/**
+ * Viewer-aware student lookup.
+ *
+ * Staff with `students.read` see any student in their tenant. A learner may
+ * only see the record linked to their own user. Probing another student's id
+ * returns 404 — never 403 — so existence is not confirmed to the caller.
+ */
+export async function getStudentForViewer(context: AuthContext, id: string) {
+  requireAuthenticated(context);
+
+  const student = await prisma.student.findFirst({
+    where: { id, ...tenantWhere(context), deletedAt: null },
+    include: studentDetailInclude,
+  });
+
+  if (!student) throw new TenantAccessError();
+
+  if (hasPermission(context, 'students.read')) return student;
+  if (student.userId && student.userId === context.userId) return student;
+
+  throw new TenantAccessError();
 }

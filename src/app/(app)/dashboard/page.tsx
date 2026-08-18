@@ -32,6 +32,11 @@ export default async function DashboardPage() {
         <StatCard label="Students" value={formatNumber(overview.counts.students)} hint="All non-archived records" />
         <StatCard label="Active students" value={formatNumber(overview.counts.activeStudents)} />
         <StatCard label="Applicants" value={formatNumber(overview.counts.applicants)} />
+        <StatCard
+          label="Open applications"
+          value={formatNumber(overview.counts.openApplications)}
+          hint={`${formatNumber(overview.counts.applications)} total`}
+        />
         <StatCard label="Staff" value={formatNumber(overview.counts.staff)} hint="Active and on probation" />
         <StatCard label="Programmes" value={formatNumber(overview.counts.programmes)} />
         <StatCard label="Departments" value={formatNumber(overview.counts.departments)} />

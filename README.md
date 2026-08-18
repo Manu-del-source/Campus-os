@@ -4,9 +4,9 @@ Multi-tenant SaaS for colleges and TVET institutions. One installation serves
 many independent institutions — admissions, academics, attendance, examinations
 and finance — with strict tenant isolation.
 
-> **Status:** foundation (phase 1). Multi-tenant data model, authentication
-> plumbing, RBAC, tenant guards, seed data, institution dashboard and platform
-> overview are in place. Remaining modules are listed in `docs/modules.md`.
+> **Status:** phase 2. Multi-tenant foundation plus admissions and student
+> management — public applications, review, offers, registration and private
+> documents. Remaining modules are listed in `docs/modules.md`.
 
 ## Why it is not a school system
 
@@ -49,6 +49,7 @@ Full instructions: `docs/development.md`.
 | [docs/database.md](docs/database.md) | Schema conventions, models, indexes, seed data |
 | [docs/security.md](docs/security.md) | Threat model and mitigations |
 | [docs/modules.md](docs/modules.md) | Module status and roadmap |
+| [docs/admissions.md](docs/admissions.md) | Application workflow, offers, registration, documents |
 | [docs/development.md](docs/development.md) | Setup, scripts, migrations, testing, conventions |
 
 ## Tenant isolation

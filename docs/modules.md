@@ -11,6 +11,8 @@ roadmap) · **Planned** (schema and boundaries designed, not yet built).
 | Identity & RBAC | `User`, `Role`, `Permission`, `RolePermission`, `UserRole`, permission catalogue, role defaults |
 | Academic structure | `Department`, `AcademicLevel`, `Programme`, `AcademicYear`, `Semester`, `Intake`, `Cohort`, `Group`, `Unit` |
 | People | `Staff`, `Student` (full profile + lifecycle status) |
+| Admissions | `Application`, `Admission`, public apply → offer → register |
+| Documents | `Document` metadata; bytes in object storage; signed downloads |
 | Audit | `AuditLog` and the append-only writer |
 | Institution workspace | App shell, permission-filtered navigation, dashboard with real aggregates, student register |
 | Platform administration | Platform shell and tenant overview |
@@ -24,11 +26,6 @@ management UI, audit viewer.
 **Academic administration** — CRUD for departments, programmes, levels, years,
 intakes, cohorts, groups and units, with Zod-validated Server Actions.
 
-**Students & admissions** — `Application`, `Admission`, `Document`; the workflow
-`DRAFT → SUBMITTED → UNDER_REVIEW → OFFERED → ACCEPTED/REJECTED/WITHDRAWN`,
-safely generated application references, offer letters, and registration that
-promotes an applicant into a `Student` with a `User` account.
-
 ## Planned
 
 | Module | Key models | Notes |
@@ -39,7 +36,7 @@ promotes an applicant into a `Student` with a `User` account.
 | Assessment & results | `Assessment`, `Mark`, `Result`, grading configuration | Marks entry → submission → verification → approval → publication, each stage permission-gated, all changes audited; grading scales are per-institution data, never hard-coded |
 | Finance | `FeeStructure`, `FeeItem`, `Invoice`, `InvoiceItem`, `Payment`, `PaymentAllocation`, `Receipt`, `FinancialTransaction` | Double-entry-friendly; balances are derived, never a single mutable field |
 | M-Pesa | integration boundary over the finance models | STK push, callback verification, idempotent transaction references, reconciliation, allocation. Credentials stay server-side; no simulated successes |
-| Documents | `Document` | Object storage for bytes, PostgreSQL for metadata, signed URLs after a permission check |
+| Documents (further kinds) | `Document` | Certificates, transcripts and finance artefacts beyond admissions |
 | Notifications | `Notification` + channel adapters | In-app and email first; SMS and WhatsApp behind the same interface |
 | Reports | — | Reads from real data only |
 | Subscriptions | `Plan`, `Subscription`, `SubscriptionEvent`, `UsageRecord` | Configurable limits (students, staff, storage) and feature flags enforced server-side |

@@ -45,3 +45,6 @@ next-env.d.ts
 
 # offline tooling placeholder
 /.prisma-offline
+
+# local document object storage
+/.data
