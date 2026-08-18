@@ -1,22 +1,23 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useTransition, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { isSupabaseConfigured } from '@/lib/env';
-import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { loginAction } from '@/server/auth/actions';
 
 /**
- * Sign-in form. Supabase performs the credential check and issues the session
- * cookies; the application then resolves roles, permissions and the active
- * institution on the server.
+ * Sign-in form. Native authentication verifies credentials against PostgreSQL
+ * with Argon2id and sets a secure HttpOnly database-backed session cookie.
  */
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pending, setPending] = useState(false);
+  const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -24,55 +25,27 @@ export function LoginForm() {
     event.preventDefault();
     setError(null);
     setNotice(null);
-    setPending(true);
 
-    try {
-      const supabase = createSupabaseBrowserClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) {
-        setError('Those credentials did not match an active account.');
-        return;
+    startTransition(async () => {
+      try {
+        const result = await loginAction({ email, password });
+        if (!result.success) {
+          setError(result.error);
+          return;
+        }
+
+        const destination = next && next.startsWith('/') ? next : result.redirectTo;
+        router.replace(destination);
+        router.refresh();
+      } catch {
+        setError('Sign-in is unavailable right now. Please try again shortly.');
       }
-      router.replace('/dashboard');
-      router.refresh();
-    } catch {
-      setError('Sign-in is unavailable right now. Please try again shortly.');
-    } finally {
-      setPending(false);
-    }
+    });
   }
 
-  async function onResetPassword() {
+  function onResetPassword() {
     setError(null);
-    setNotice(null);
-    if (!email) {
-      setError('Enter your email address first, then request a reset link.');
-      return;
-    }
-    try {
-      const supabase = createSupabaseBrowserClient();
-      await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      });
-      setNotice('If that address has an account, a reset link is on its way.');
-    } catch {
-      setError('Password reset is unavailable right now.');
-    }
-  }
-
-  if (!isSupabaseConfigured) {
-    return (
-      <div
-        role="status"
-        className="rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-4 text-sm"
-      >
-        <p className="font-medium">Authentication is not configured on this deployment.</p>
-        <p className="mt-1 text-[var(--color-muted-foreground)]">
-          Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to
-          enable sign-in.
-        </p>
-      </div>
-    );
+    setNotice('Password reset is managed by your institution administrator. Please contact your IT or admissions office to reset your credentials.');
   }
 
   return (
@@ -120,8 +93,8 @@ export function LoginForm() {
         />
       </div>
 
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? 'Signing in…' : 'Sign in'}
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending ? 'Signing in…' : 'Sign in'}
       </Button>
 
       <button

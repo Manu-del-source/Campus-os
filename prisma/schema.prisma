@@ -242,19 +242,20 @@ model Campus {
 // Identity, roles and permissions
 // ---------------------------------------------------------------------------
 
-/// Application user. `authUserId` maps to the Supabase Auth (GoTrue) user id.
+/// Application user with native authentication (Argon2id password hashes & session records).
 /// Platform administrators have a null `institutionId`; everyone else is
 /// permanently bound to exactly one tenant.
 model User {
   id            String  @id @default(uuid(7)) @db.Uuid
   institutionId String? @db.Uuid
 
-  authUserId String? @unique @db.Uuid
-  email      String
-  firstName  String
-  lastName   String
-  phone      String?
-  avatarUrl  String?
+  authUserId   String? @unique @db.Uuid
+  email        String
+  passwordHash String?
+  firstName    String
+  lastName     String
+  phone        String?
+  avatarUrl    String?
 
   status          UserStatus @default(INVITED)
   isPlatformAdmin Boolean    @default(false)
@@ -267,6 +268,7 @@ model User {
 
   institution            Institution?  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   userRoles              UserRole[]
+  sessions               Session[]
   staffProfile           Staff?
   studentRecord          Student?
   reviewedApplications   Application[] @relation("ApplicationReviewer")
@@ -277,6 +279,23 @@ model User {
   @@index([institutionId])
   @@index([email])
   @@map("users")
+}
+
+/// Active database-backed user session. Tokens are stored only as SHA-256 hashes.
+model Session {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 /// Roles are either platform-wide system roles (`institutionId` null) or

@@ -27,21 +27,21 @@ enforced in code and covered by tests.
 | Unauthorized marks / finance changes | Separate permissions per workflow stage (`marks.enter`, `marks.submit`, `marks.verify`, `results.approve`, `results.publish`; `finance.invoice`, `finance.payment`, `finance.receipt`) |
 | XSS | React escapes by default; no `dangerouslySetInnerHTML` anywhere in the codebase |
 | SQL injection | Prisma parameterises all queries; the single raw statement (test truncation helper) uses no user input |
-| CSRF | Mutations run as POST-only Server Actions / route handlers with SameSite session cookies managed by Supabase SSR |
-| Secret exposure | Secrets are read through `serverEnv()` in server-only modules; only `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL` and the anon key are public |
+| CSRF | Mutations run as POST-only Server Actions / route handlers with SameSite=Lax HttpOnly session cookies |
+| Secret exposure | Secrets are read through `serverEnv()` in server-only modules; only `NEXT_PUBLIC_APP_URL` is public |
 | Insecure file access | Documents are stored in object storage with signed, expiring URLs issued after a server-side permission check; only metadata lives in PostgreSQL. Staff need `documents.read` **and** `students.read`. Learners never receive `documents.read`; they reach their own files through ownership. Probing another student's id or document returns 404, not 403 |
 | Replayed payment callbacks | The finance phase records a unique provider transaction reference per payment; callbacks are idempotent and never trusted without server-side verification against the provider |
 | Untrusted input | All external input is parsed with Zod before use (see `studentListQuerySchema`) |
 
 ## Authentication
 
-Supabase Auth (GoTrue) handles credentials, email verification, password reset
-and session cookies. CampusOS stores no passwords. The application maps
-`auth.users.id` to `User.authUserId` and refuses sessions whose CampusOS user is
-missing, soft-deleted or not `ACTIVE`.
+Native application authentication is backed by PostgreSQL and Prisma:
+- **Password hashing:** Argon2id (OWASP recommended parameters: 19 MiB memory, 2 iterations, 1 thread). Plaintext passwords are never stored or logged.
+- **Sessions:** Cryptographically secure 256-bit random tokens. Only the SHA-256 hash is persisted to the database. The raw token is stored exclusively in an HttpOnly, SameSite=Lax (Secure in production) cookie.
+- **Revocation & Expiry:** Sessions expire automatically after 30 days and support single and multi-session revocation on logout. Inactive or soft-deleted users are immediately denied access.
 
 A development-only impersonation escape hatch (`CAMPUSOS_DEV_LOGIN_EMAIL`) exists
-for working without Supabase credentials. It is disabled whenever
+for local development convenience. It is disabled whenever
 `NODE_ENV === 'production'`.
 
 ## Auditing
@@ -54,7 +54,7 @@ trail requires `audit.read` (tenant) or `platform.audit.read` (platform).
 ## Secrets
 
 - `.env` is git-ignored; `.env.example` documents every variable with placeholders.
-- `SUPABASE_SERVICE_ROLE_KEY` and future M-Pesa Daraja credentials are server-only
+- Future M-Pesa Daraja credentials and document signing secrets are server-only
   and must never be prefixed `NEXT_PUBLIC_`.
 - `src/lib/env.ts` validates the environment with Zod and throws early on
   misconfiguration.

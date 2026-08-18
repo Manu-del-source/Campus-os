@@ -30,7 +30,7 @@ export async function resetDatabase(): Promise<void> {
     TRUNCATE TABLE
       "audit_logs", "documents", "admissions", "applications", "students", "staff",
       "units", "groups", "cohorts", "semesters", "intakes", "academic_years",
-      "programmes", "academic_levels", "departments", "user_roles", "role_permissions",
+      "programmes", "academic_levels", "departments", "sessions", "user_roles", "role_permissions",
       "roles", "permissions", "users", "campuses", "institutions"
     RESTART IDENTITY CASCADE;
   `);
@@ -38,7 +38,7 @@ export async function resetDatabase(): Promise<void> {
 
 /**
  * Builds an auth context directly. Tests exercise server code the same way a
- * request would, but without needing a live Supabase session.
+ * request would.
  */
 export function authContext(overrides: {
   userId?: string;
