@@ -1,0 +1,748 @@
+// CampusOS — multi-tenant SaaS for colleges and TVET institutions.
+//
+// Conventions
+// -----------
+// * Every institution-owned table carries `institutionId` and is indexed on it.
+// * Uniqueness of business keys is ALWAYS scoped by `institutionId`
+//   (e.g. a student number is unique per institution, never globally).
+// * Identifiers are UUIDv7 — non-sequential across tenants but index friendly.
+// * Records with legal/academic weight are soft-deleted (`deletedAt`).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum InstitutionStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum InstitutionType {
+  TVET
+  TECHNICAL_COLLEGE
+  NATIONAL_POLYTECHNIC
+  UNIVERSITY_COLLEGE
+  PRIVATE_COLLEGE
+  OTHER
+}
+
+enum RoleScope {
+  PLATFORM
+  INSTITUTION
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum Gender {
+  FEMALE
+  MALE
+  OTHER
+  UNDISCLOSED
+}
+
+enum DurationUnit {
+  WEEK
+  MONTH
+  TERM
+  SEMESTER
+  YEAR
+}
+
+enum AcademicPeriodStatus {
+  PLANNED
+  ACTIVE
+  CLOSED
+  ARCHIVED
+}
+
+enum IntakeStatus {
+  PLANNED
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum StudentStatus {
+  APPLICANT
+  ADMITTED
+  ACTIVE
+  SUSPENDED
+  DEFERRED
+  COMPLETED
+  GRADUATED
+  WITHDRAWN
+  DISCONTINUED
+}
+
+enum StaffEmploymentStatus {
+  ACTIVE
+  PROBATION
+  ON_LEAVE
+  SUSPENDED
+  CONTRACT_ENDED
+  TERMINATED
+  RETIRED
+}
+
+enum StaffCategory {
+  ACADEMIC
+  ADMINISTRATIVE
+  SUPPORT
+  MANAGEMENT
+}
+
+enum UnitType {
+  CORE
+  ELECTIVE
+  COMMON
+  INDUSTRIAL_ATTACHMENT
+  PROJECT
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  INTEGRATION
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+/// The tenant root. Everything else in the product hangs off this record.
+model Institution {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  /// URL/sub-domain safe tenant key, e.g. "demo-college".
+  slug      String            @unique
+  name      String
+  shortName String?
+  type      InstitutionType   @default(TVET)
+  status    InstitutionStatus @default(PENDING)
+
+  registrationNumber String?
+  email              String?
+  phone              String?
+  websiteUrl         String?
+  logoUrl            String?
+  addressLine1       String?
+  addressLine2       String?
+  city               String?
+  county             String?
+  country            String  @default("KE")
+  postalCode         String?
+
+  /// IANA timezone used for timetable/attendance rendering.
+  timezone String @default("Africa/Nairobi")
+  /// ISO-4217 currency used by the finance module.
+  currency String @default("KES")
+  locale   String @default("en-KE")
+
+  /// Tenant-scoped configuration (branding, numbering formats, module toggles).
+  settings Json @default("{}")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  campuses      Campus[]
+  users         User[]
+  roles         Role[]
+  userRoles     UserRole[]
+  departments   Department[]
+  programmes    Programme[]
+  academicLevels AcademicLevel[]
+  academicYears AcademicYear[]
+  intakes       Intake[]
+  cohorts       Cohort[]
+  groups        Group[]
+  semesters     Semester[]
+  units         Unit[]
+  staff         Staff[]
+  students      Student[]
+  auditLogs     AuditLog[]
+
+  @@index([status])
+  @@map("institutions")
+}
+
+model Campus {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+
+  code         String
+  name         String
+  isMain       Boolean @default(false)
+  addressLine1 String?
+  city         String?
+  county       String?
+  phone        String?
+  email        String?
+  isActive     Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  departments Department[]
+  staff       Staff[]
+  students    Student[]
+  groups      Group[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@map("campuses")
+}
+
+// ---------------------------------------------------------------------------
+// Identity, roles and permissions
+// ---------------------------------------------------------------------------
+
+/// Application user. `authUserId` maps to the Supabase Auth (GoTrue) user id.
+/// Platform administrators have a null `institutionId`; everyone else is
+/// permanently bound to exactly one tenant.
+model User {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String? @db.Uuid
+
+  authUserId String? @unique @db.Uuid
+  email      String
+  firstName  String
+  lastName   String
+  phone      String?
+  avatarUrl  String?
+
+  status          UserStatus @default(INVITED)
+  isPlatformAdmin Boolean    @default(false)
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution   Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  userRoles     UserRole[]
+  staffProfile  Staff?
+  studentRecord Student?
+  auditLogs     AuditLog[]
+
+  @@unique([institutionId, email])
+  @@index([institutionId])
+  @@index([email])
+  @@map("users")
+}
+
+/// Roles are either platform-wide system roles (`institutionId` null) or
+/// tenant-defined roles. `key` is the stable machine name used in code.
+model Role {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String? @db.Uuid
+
+  key         String
+  name        String
+  description String?
+  scope       RoleScope @default(INSTITUTION)
+  /// System roles are seeded by CampusOS and cannot be deleted by tenants.
+  isSystem    Boolean   @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution     Institution?     @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  rolePermissions RolePermission[]
+  userRoles       UserRole[]
+
+  @@unique([institutionId, key])
+  @@index([institutionId])
+  @@map("roles")
+}
+
+/// Global catalogue of granular permissions, e.g. `students.read`.
+model Permission {
+  id          String  @id @default(uuid(7)) @db.Uuid
+  key         String  @unique
+  /// Coarse grouping used by the permission matrix UI, e.g. `students`.
+  module      String
+  description String?
+
+  createdAt DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(uuid(7)) @db.Uuid
+  roleId       String @db.Uuid
+  permissionId String @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+/// Role assignment. `institutionId` is denormalised so tenant filters can be
+/// applied without joining through `users`.
+model UserRole {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  userId        String  @db.Uuid
+  roleId        String  @db.Uuid
+  institutionId String? @db.Uuid
+
+  grantedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId, institutionId])
+  @@index([institutionId])
+  @@index([userId])
+  @@map("user_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Academic structure
+// ---------------------------------------------------------------------------
+
+model Department {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  campusId      String? @db.Uuid
+
+  code        String
+  name        String
+  description String?
+  headStaffId String? @unique @db.Uuid
+  isActive    Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  campus      Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  head        Staff?      @relation("DepartmentHead", fields: [headStaffId], references: [id], onDelete: SetNull)
+  programmes  Programme[]
+  staff       Staff[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@map("departments")
+}
+
+/// Qualification level (KNQF level, certificate/diploma tier, ...).
+/// Configurable per institution — CampusOS never hard-codes a ladder.
+model AcademicLevel {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+
+  code        String
+  name        String
+  /// Ordering rank used for progression and reporting (e.g. 4, 5, 6).
+  rank        Int
+  description String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  programmes  Programme[]
+  units       Unit[]
+  students    Student[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@map("academic_levels")
+}
+
+model Programme {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  departmentId  String  @db.Uuid
+  levelId       String? @db.Uuid
+
+  code        String
+  name        String
+  description String?
+
+  duration     Int
+  durationUnit DurationUnit @default(YEAR)
+  /// Number of academic stages (years/blocks) a learner progresses through.
+  stages       Int          @default(1)
+
+  /// Awarding/examining body, e.g. a national qualifications authority.
+  examiningBody       String?
+  accreditationNumber String?
+  accreditedUntil     DateTime?
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  department  Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  level       AcademicLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  units       Unit[]
+  cohorts     Cohort[]
+  students    Student[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@index([institutionId, departmentId])
+  @@index([institutionId, levelId])
+  @@map("programmes")
+}
+
+model AcademicYear {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+
+  code      String
+  name      String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+  /// Exactly one academic year per institution may be current (enforced in code).
+  isCurrent Boolean  @default(false)
+  status    AcademicPeriodStatus @default(PLANNED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  intakes     Intake[]
+  semesters   Semester[]
+  cohorts     Cohort[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@index([institutionId, isCurrent])
+  @@map("academic_years")
+}
+
+model Intake {
+  id             String @id @default(uuid(7)) @db.Uuid
+  institutionId  String @db.Uuid
+  academicYearId String @db.Uuid
+
+  code            String
+  name            String
+  startDate       DateTime     @db.Date
+  endDate         DateTime?    @db.Date
+  applicationOpen DateTime?
+  applicationClose DateTime?
+  status          IntakeStatus @default(PLANNED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution  Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  cohorts      Cohort[]
+  students     Student[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@index([institutionId, academicYearId])
+  @@index([institutionId, status])
+  @@map("intakes")
+}
+
+model Semester {
+  id             String @id @default(uuid(7)) @db.Uuid
+  institutionId  String @db.Uuid
+  academicYearId String @db.Uuid
+
+  code        String
+  name        String
+  /// Position within the academic year (1, 2, 3 ...).
+  sequence    Int
+  startDate   DateTime             @db.Date
+  endDate     DateTime             @db.Date
+  isCurrent   Boolean              @default(false)
+  status      AcademicPeriodStatus @default(PLANNED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution  Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
+  units        Unit[]
+
+  @@unique([institutionId, code])
+  @@unique([academicYearId, sequence])
+  @@index([institutionId])
+  @@index([institutionId, isCurrent])
+  @@map("semesters")
+}
+
+/// A cohort is one programme intake: the learners admitted together.
+/// Example key: ICT-DIP-SEP26.
+model Cohort {
+  id             String  @id @default(uuid(7)) @db.Uuid
+  institutionId  String  @db.Uuid
+  programmeId    String  @db.Uuid
+  intakeId       String  @db.Uuid
+  academicYearId String? @db.Uuid
+
+  code        String
+  name        String
+  /// Current stage of the cohort within the programme (year 1, year 2 ...).
+  currentStage Int     @default(1)
+  startDate   DateTime? @db.Date
+  expectedEndDate DateTime? @db.Date
+  status      AcademicPeriodStatus @default(PLANNED)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution  Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  programme    Programme     @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  intake       Intake        @relation(fields: [intakeId], references: [id], onDelete: Restrict)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  groups       Group[]
+  students     Student[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@index([institutionId, programmeId])
+  @@index([institutionId, intakeId])
+  @@map("cohorts")
+}
+
+/// A teachable subdivision of a cohort. Groups — not "streams" — are what the
+/// timetable, attendance and lecturer allocation modules schedule against.
+model Group {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  cohortId      String  @db.Uuid
+  campusId      String? @db.Uuid
+
+  code     String
+  name     String
+  capacity Int?
+  isActive Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  cohort      Cohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  campus      Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  students    Student[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@index([institutionId, cohortId])
+  @@map("groups")
+}
+
+model Unit {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  programmeId   String  @db.Uuid
+  levelId       String? @db.Uuid
+  semesterId    String? @db.Uuid
+
+  code        String
+  name        String
+  description String?
+  type        UnitType @default(CORE)
+
+  creditHours  Int?
+  contactHours Int?
+  /// Programme stage in which the unit is normally taken.
+  stage        Int  @default(1)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  programme   Programme      @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  level       AcademicLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  semester    Semester?      @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@index([institutionId, programmeId])
+  @@index([institutionId, semesterId])
+  @@map("units")
+}
+
+// ---------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------
+
+model Staff {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  userId        String? @unique @db.Uuid
+  departmentId  String? @db.Uuid
+  campusId      String? @db.Uuid
+
+  staffNumber String
+  firstName   String
+  middleName  String?
+  lastName    String
+  email       String
+  phone       String?
+  nationalId  String?
+  gender      Gender?
+  dateOfBirth DateTime? @db.Date
+
+  category         StaffCategory         @default(ACADEMIC)
+  jobTitle         String?
+  employmentStatus StaffEmploymentStatus @default(ACTIVE)
+  employmentDate   DateTime?             @db.Date
+  exitDate         DateTime?             @db.Date
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution     Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user            User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  campus          Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  headsDepartment Department? @relation("DepartmentHead")
+
+  @@unique([institutionId, staffNumber])
+  @@unique([institutionId, email])
+  @@index([institutionId])
+  @@index([institutionId, departmentId])
+  @@index([institutionId, employmentStatus])
+  @@map("staff")
+}
+
+model Student {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  userId        String? @unique @db.Uuid
+
+  studentNumber        String
+  applicationReference String?
+
+  firstName     String
+  middleName    String?
+  lastName      String
+  preferredName String?
+  dateOfBirth   DateTime? @db.Date
+  gender        Gender?
+  nationalId    String?
+  nationality   String    @default("KE")
+  email         String?
+  phone         String?
+  photoUrl      String?
+
+  addressLine1 String?
+  city         String?
+  county       String?
+  postalCode   String?
+
+  guardianName         String?
+  guardianRelationship String?
+  guardianPhone        String?
+  guardianEmail        String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+
+  programmeId String? @db.Uuid
+  levelId     String? @db.Uuid
+  intakeId    String? @db.Uuid
+  cohortId    String? @db.Uuid
+  groupId     String? @db.Uuid
+  campusId    String? @db.Uuid
+
+  status        StudentStatus @default(APPLICANT)
+  admissionDate DateTime?     @db.Date
+  completionDate DateTime?    @db.Date
+  /// Free-form notes are deliberately excluded here; use documents/audit trail.
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Student records are never hard-deleted; they are archived.
+  deletedAt DateTime?
+
+  institution Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  programme   Programme?     @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  level       AcademicLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
+  intake      Intake?        @relation(fields: [intakeId], references: [id], onDelete: SetNull)
+  cohort      Cohort?        @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  group       Group?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  campus      Campus?        @relation(fields: [campusId], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, studentNumber])
+  @@unique([institutionId, applicationReference])
+  @@index([institutionId])
+  @@index([institutionId, status])
+  @@index([institutionId, programmeId])
+  @@index([institutionId, cohortId])
+  @@index([institutionId, groupId])
+  @@index([institutionId, intakeId])
+  @@index([institutionId, lastName])
+  @@map("students")
+}
+
+// ---------------------------------------------------------------------------
+// Auditing
+// ---------------------------------------------------------------------------
+
+/// Append-only trail. Application code never updates or deletes rows here.
+model AuditLog {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String? @db.Uuid
+  actorUserId   String? @db.Uuid
+
+  actorType   AuditActorType @default(USER)
+  actorLabel  String?
+  action      String
+  entityType  String
+  entityId    String?
+  summary     String?
+  metadata    Json           @default("{}")
+  ipAddress   String?
+  userAgent   String?
+
+  createdAt DateTime @default(now())
+
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  actor       User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, createdAt])
+  @@index([institutionId, entityType, entityId])
+  @@index([actorUserId])
+  @@map("audit_logs")
+}
