@@ -29,7 +29,7 @@ export const INSTITUTION_NAV: readonly NavSection[] = [
     items: [
       { label: 'Students', href: '/students', permission: 'students.read' },
       { label: 'Staff', href: '/staff-directory', permission: 'staff.read' },
-      { label: 'Admissions', href: '/admissions', permission: 'admissions.read', planned: true },
+      { label: 'Admissions', href: '/admissions', permission: 'admissions.read' },
     ],
   },
   {
