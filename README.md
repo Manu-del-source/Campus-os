@@ -24,7 +24,7 @@ are per-institution configuration, never hard-coded.
 ## Stack
 
 Next.js (App Router) · TypeScript (strict) · Tailwind CSS v4 · PostgreSQL ·
-Prisma 7 · Supabase Auth · Zod · Vitest. Vercel-compatible.
+Prisma 7 · first-party auth (Neon/PostgreSQL) · Zod · Vitest. Vercel-compatible.
 
 ## Quick start
 

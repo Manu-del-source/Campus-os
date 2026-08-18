@@ -1,13 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
+
+import { SESSION_COOKIE_NAME } from '@/lib/auth/constants';
 
 /**
- * Session refresh + coarse route gating.
+ * Coarse route gating.
  *
- * The middleware keeps Supabase auth cookies fresh and bounces obviously
- * unauthenticated traffic away from private areas. It is a convenience layer
- * only: every page, action and route handler re-checks authentication,
- * permissions and tenant ownership on the server.
+ * Middleware only checks that a session cookie is present. Every page, action
+ * and route handler re-checks authentication, expiry, revocation, permissions
+ * and tenant ownership on the server.
  */
 const PROTECTED_PREFIXES = [
   '/dashboard',
@@ -31,6 +31,7 @@ const PROTECTED_PREFIXES = [
   '/platform',
   '/student',
   '/staff',
+  '/account',
 ];
 
 function isProtected(pathname: string): boolean {
@@ -39,40 +40,16 @@ function isProtected(pathname: string): boolean {
   );
 }
 
-export async function middleware(request: NextRequest): Promise<NextResponse> {
-  const response = NextResponse.next({ request });
+export function middleware(request: NextRequest): NextResponse {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  // Without Supabase configured there is no session to refresh; page-level
-  // guards still apply.
-  if (!supabaseUrl || !supabaseAnonKey) return response;
-
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        for (const { name, value, options } of cookiesToSet) {
-          response.cookies.set(name, value, options);
-        }
-      },
-    },
-  });
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user && isProtected(request.nextUrl.pathname)) {
+  if (!token && isProtected(request.nextUrl.pathname)) {
     const redirectUrl = new URL('/login', request.url);
     redirectUrl.searchParams.set('next', request.nextUrl.pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {

@@ -123,6 +123,12 @@ export function AppShell({
               {initials(user.firstName, user.lastName)}
             </span>
             <Link
+              href="/account/password"
+              className="rounded-[var(--radius-base)] border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-[var(--color-surface-muted)]"
+            >
+              Password
+            </Link>
+            <Link
               href="/logout"
               className="rounded-[var(--radius-base)] border border-[var(--color-border)] px-3 py-1.5 text-sm hover:bg-[var(--color-surface-muted)]"
             >

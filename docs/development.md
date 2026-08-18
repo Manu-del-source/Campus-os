@@ -9,7 +9,7 @@
 
 ```bash
 npm install
-cp .env.example .env      # fill in DATABASE_URL / DIRECT_URL (and Supabase keys if available)
+cp .env.example .env      # fill in DATABASE_URL / DIRECT_URL
 npm run db:generate       # generate the Prisma client into src/generated/prisma
 npm run db:deploy         # apply migrations
 npm run db:seed           # demo data (development only)
@@ -34,11 +34,15 @@ DATABASE_URL="postgresql://campusos:campusos@127.0.0.1:55432/campusos"
 DIRECT_URL="postgresql://campusos:campusos@127.0.0.1:55432/campusos"
 ```
 
-### Working without Supabase credentials
+### Development login
 
-Set `CAMPUSOS_DEV_LOGIN_EMAIL` to a seeded user (for example
-`admin@demo-college.example`) to browse the institution workspace without an auth
-provider. The switch is ignored when `NODE_ENV=production`.
+After `npm run db:seed`, sign in at `/login` with a seeded administrator:
+
+- Institution: `admin@demo-college.example` / `CampusOS-Dev-Only-2026!`
+- Platform: `platform-admin@campusos.example` / `CampusOS-Dev-Only-2026!`
+
+These credentials are **development-only**. They are hashed in PostgreSQL by the
+seed script and must never be used as production defaults.
 
 ## Scripts
 

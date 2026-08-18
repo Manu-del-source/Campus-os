@@ -242,19 +242,21 @@ model Campus {
 // Identity, roles and permissions
 // ---------------------------------------------------------------------------
 
-/// Application user. `authUserId` maps to the Supabase Auth (GoTrue) user id.
-/// Platform administrators have a null `institutionId`; everyone else is
-/// permanently bound to exactly one tenant.
+/// Application user. Passwords live as a one-way hash on this row; sessions
+/// and reset tokens are separate tables. Platform administrators have a null
+/// `institutionId`; everyone else is permanently bound to exactly one tenant.
 model User {
   id            String  @id @default(uuid(7)) @db.Uuid
   institutionId String? @db.Uuid
 
-  authUserId String? @unique @db.Uuid
-  email      String
-  firstName  String
-  lastName   String
-  phone      String?
-  avatarUrl  String?
+  email     String
+  firstName String
+  lastName  String
+  phone     String?
+  avatarUrl String?
+
+  /// scrypt digest. Never selected into client components or logs.
+  passwordHash String?
 
   status          UserStatus @default(INVITED)
   isPlatformAdmin Boolean    @default(false)
@@ -265,18 +267,56 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  institution            Institution?  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  institution            Institution?         @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   userRoles              UserRole[]
   staffProfile           Staff?
   studentRecord          Student?
-  reviewedApplications   Application[] @relation("ApplicationReviewer")
-  uploadedDocuments      Document[]    @relation("DocumentUploader")
+  reviewedApplications   Application[]        @relation("ApplicationReviewer")
+  uploadedDocuments      Document[]           @relation("DocumentUploader")
   auditLogs              AuditLog[]
+  sessions               Session[]
+  passwordResetTokens    PasswordResetToken[]
 
   @@unique([institutionId, email])
   @@index([institutionId])
   @@index([email])
   @@map("users")
+}
+
+/// Server-issued session. The raw token is stored only in an HTTP-only cookie;
+/// PostgreSQL keeps the SHA-256 hash so a leaked database cannot impersonate.
+model Session {
+  id        String @id @default(uuid(7)) @db.Uuid
+  userId    String @db.Uuid
+  tokenHash String @unique
+
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// One-time password-reset token. Raw value is emailed; only the hash is stored.
+model PasswordResetToken {
+  id        String @id @default(uuid(7)) @db.Uuid
+  userId    String @db.Uuid
+  tokenHash String @unique
+
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 /// Roles are either platform-wide system roles (`institutionId` null) or
