@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/*
+ * CampusOS design tokens.
+ * Neutral, institutional palette with a single accent. Contrast ratios are
+ * chosen to satisfy WCAG AA for body text on both surfaces.
+ */
+:root {
+  --background: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --foreground: #10151c;
+  --muted-foreground: #5b6673;
+  --border: #e1e5ea;
+  --accent: #0f5c4f;
+  --accent-foreground: #ffffff;
+  --accent-soft: #e6f1ee;
+  --danger: #b42318;
+  --warning: #b54708;
+  --success: #067647;
+  --ring: #0f5c4f;
+  --radius: 0.625rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-ring: var(--ring);
+  --radius-base: var(--radius);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b0f14;
+    --surface: #121821;
+    --surface-muted: #161e29;
+    --foreground: #e8edf3;
+    --muted-foreground: #9aa7b5;
+    --border: #222c39;
+    --accent: #35a48d;
+    --accent-foreground: #05100d;
+    --accent-soft: #12241f;
+    --danger: #f97066;
+    --warning: #fdb022;
+    --success: #47cd89;
+    --ring: #35a48d;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04";
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
