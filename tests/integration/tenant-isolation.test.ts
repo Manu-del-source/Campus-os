@@ -3,8 +3,12 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { TenantAccessError } from '@/lib/auth/errors';
 import { ForbiddenError } from '@/lib/auth/errors';
 import { assertTenantAccess } from '@/lib/auth/authorization';
-import { getStudentById, listStudents, studentListQuerySchema } from '@/server/students/queries';
+import { getStudentById, getStudentForViewer, listStudents, studentListQuerySchema } from '@/server/students/queries';
 import { getInstitutionOverview } from '@/server/institution/overview';
+import { getApplicationById, listApplications } from '@/server/admissions/queries';
+import { applicationListQuerySchema } from '@/server/admissions/schemas';
+import { generateAccessToken, hashAccessToken } from '@/server/admissions/references';
+import { getDocumentForViewer } from '@/server/documents/access';
 import {
   authContext,
   disconnectTestPrisma,
@@ -106,5 +110,106 @@ describe.skipIf(!hasTestDatabase)('tenant isolation', () => {
       permissions: ['timetable.read'],
     });
     await expect(listStudents(lecturerWithoutRead, query)).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('lists only applications belonging to the caller institution', async () => {
+    const prisma = testPrisma();
+    await prisma.application.create({
+      data: {
+        institutionId: tenantA.institutionId,
+        programmeId: tenantA.programmeId,
+        intakeId: tenantA.intakeId,
+        reference: 'APP-2026-ALPHA1',
+        firstName: 'Asha',
+        lastName: 'Applicant',
+        email: 'asha@alpha.test',
+        accessTokenHash: hashAccessToken(generateAccessToken()),
+        status: 'SUBMITTED',
+      },
+    });
+    await prisma.application.create({
+      data: {
+        institutionId: tenantB.institutionId,
+        programmeId: tenantB.programmeId,
+        intakeId: tenantB.intakeId,
+        reference: 'APP-2026-BETA1',
+        firstName: 'Beryl',
+        lastName: 'Applicant',
+        email: 'beryl@beta.test',
+        accessTokenHash: hashAccessToken(generateAccessToken()),
+        status: 'SUBMITTED',
+      },
+    });
+
+    const contextA = authContext({ institutionId: tenantA.institutionId, roleKeys: ['REGISTRAR'] });
+    const result = await listApplications(contextA, applicationListQuerySchema.parse({}));
+    expect(result.total).toBe(1);
+    expect(result.rows[0]?.email).toBe('asha@alpha.test');
+    expect(result.rows.map((row) => row.email)).not.toContain('beryl@beta.test');
+  });
+
+  it('never resolves an application id from another institution', async () => {
+    const prisma = testPrisma();
+    const foreign = await prisma.application.create({
+      data: {
+        institutionId: tenantB.institutionId,
+        programmeId: tenantB.programmeId,
+        intakeId: tenantB.intakeId,
+        reference: 'APP-2026-BETA2',
+        firstName: 'Cora',
+        lastName: 'Applicant',
+        email: 'cora@beta.test',
+        accessTokenHash: hashAccessToken(generateAccessToken()),
+      },
+    });
+
+    const contextA = authContext({ institutionId: tenantA.institutionId, roleKeys: ['REGISTRAR'] });
+    await expect(getApplicationById(contextA, foreign.id)).rejects.toBeInstanceOf(TenantAccessError);
+  });
+
+  it('returns 404 when a learner probes another student id', async () => {
+    const prisma = testPrisma();
+    const user = await prisma.user.create({
+      data: {
+        institutionId: tenantA.institutionId,
+        email: 'learner@alpha.test',
+        firstName: 'Own',
+        lastName: 'Learner',
+        status: 'ACTIVE',
+      },
+    });
+    await prisma.student.update({
+      where: { id: tenantA.studentIds[0] },
+      data: { userId: user.id },
+    });
+
+    const learner = authContext({
+      userId: user.id,
+      institutionId: tenantA.institutionId,
+      roleKeys: ['STUDENT'],
+    });
+
+    const own = await getStudentForViewer(learner, tenantA.studentIds[0]);
+    expect(own.id).toBe(tenantA.studentIds[0]);
+
+    await expect(getStudentForViewer(learner, tenantA.studentIds[1])).rejects.toBeInstanceOf(TenantAccessError);
+    await expect(getStudentForViewer(learner, tenantB.studentIds[0])).rejects.toBeInstanceOf(TenantAccessError);
+  });
+
+  it('does not leak another tenant document to staff', async () => {
+    const prisma = testPrisma();
+    const document = await prisma.document.create({
+      data: {
+        institutionId: tenantB.institutionId,
+        kind: 'IDENTITY',
+        fileName: 'id.pdf',
+        mimeType: 'application/pdf',
+        byteSize: 12,
+        storageKey: 'missing',
+      },
+    });
+
+    const contextA = authContext({ institutionId: tenantA.institutionId, roleKeys: ['REGISTRAR'] });
+    await expect(getDocumentForViewer(contextA, document.id)).rejects.toBeInstanceOf(TenantAccessError);
   });
 });

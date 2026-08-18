@@ -28,10 +28,10 @@ export async function resetDatabase(): Promise<void> {
   const prisma = testPrisma();
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
-      "audit_logs", "students", "staff", "units", "groups", "cohorts", "semesters",
-      "intakes", "academic_years", "programmes", "academic_levels", "departments",
-      "user_roles", "role_permissions", "roles", "permissions", "users", "campuses",
-      "institutions"
+      "audit_logs", "documents", "admissions", "applications", "students", "staff",
+      "units", "groups", "cohorts", "semesters", "intakes", "academic_years",
+      "programmes", "academic_levels", "departments", "user_roles", "role_permissions",
+      "roles", "permissions", "users", "campuses", "institutions"
     RESTART IDENTITY CASCADE;
   `);
 }
@@ -70,6 +70,11 @@ export interface SeededTenant {
   institutionId: string;
   programmeId: string;
   studentIds: string[];
+  intakeId: string;
+  campusId: string;
+  academicYearId: string;
+  cohortId: string;
+  groupId: string;
 }
 
 /** Creates a minimal, self-contained tenant for isolation tests. */
@@ -95,6 +100,54 @@ export async function seedTenant(slug: string, studentNames: string[]): Promise<
     },
   });
 
+  const academicYear = await prisma.academicYear.create({
+    data: {
+      institutionId: institution.id,
+      code: '2026',
+      name: 'Academic Year 2026',
+      startDate: new Date('2026-01-05'),
+      endDate: new Date('2026-12-11'),
+      isCurrent: true,
+      status: 'ACTIVE',
+    },
+  });
+
+  const intake = await prisma.intake.create({
+    data: {
+      institutionId: institution.id,
+      academicYearId: academicYear.id,
+      code: 'SEP2026',
+      name: 'September 2026',
+      startDate: new Date('2026-09-07'),
+      status: 'OPEN',
+    },
+  });
+
+  const campus = await prisma.campus.create({
+    data: { institutionId: institution.id, code: 'MAIN', name: 'Main Campus', isMain: true },
+  });
+
+  const cohort = await prisma.cohort.create({
+    data: {
+      institutionId: institution.id,
+      programmeId: programme.id,
+      intakeId: intake.id,
+      academicYearId: academicYear.id,
+      code: `${slug.toUpperCase()}-SEP26`,
+      name: 'September 2026 cohort',
+    },
+  });
+
+  const group = await prisma.group.create({
+    data: {
+      institutionId: institution.id,
+      cohortId: cohort.id,
+      campusId: campus.id,
+      code: `${slug.toUpperCase()}-SEP26-A`,
+      name: 'Group A',
+    },
+  });
+
   const studentIds: string[] = [];
   for (const [index, name] of studentNames.entries()) {
     const student = await prisma.student.create({
@@ -110,5 +163,27 @@ export async function seedTenant(slug: string, studentNames: string[]): Promise<
     studentIds.push(student.id);
   }
 
-  return { institutionId: institution.id, programmeId: programme.id, studentIds };
+  return {
+    institutionId: institution.id,
+    programmeId: programme.id,
+    studentIds,
+    intakeId: intake.id,
+    campusId: campus.id,
+    academicYearId: academicYear.id,
+    cohortId: cohort.id,
+    groupId: group.id,
+  };
+}
+
+export async function seedUser(institutionId: string, email: string): Promise<string> {
+  const user = await testPrisma().user.create({
+    data: {
+      institutionId,
+      email,
+      firstName: 'Staff',
+      lastName: 'Member',
+      status: 'ACTIVE',
+    },
+  });
+  return user.id;
 }

@@ -56,6 +56,37 @@ describe('permission catalogue', () => {
     expect(hasPermission(finance, 'marks.enter')).toBe(false);
     expect(hasPermission(finance, 'students.delete')).toBe(false);
   });
+
+  it('does not grant documents.read to the STUDENT role', () => {
+    expect(DEFAULT_ROLE_PERMISSIONS.STUDENT).not.toContain('documents.read');
+    expect(DEFAULT_ROLE_PERMISSIONS.STUDENT).not.toContain('documents.manage');
+    const student = authContext({ institutionId: TENANT_A, roleKeys: ['STUDENT'] });
+    expect(hasPermission(student, 'documents.read')).toBe(false);
+  });
+
+  it('gives admissions officers offer and register, but not approve', () => {
+    const officer = authContext({ institutionId: TENANT_A, roleKeys: ['ADMISSIONS_OFFICER'] });
+    expect(hasPermission(officer, 'admissions.read')).toBe(true);
+    expect(hasPermission(officer, 'admissions.review')).toBe(true);
+    expect(hasPermission(officer, 'admissions.offer')).toBe(true);
+    expect(hasPermission(officer, 'admissions.register')).toBe(true);
+    expect(hasPermission(officer, 'admissions.approve')).toBe(false);
+  });
+
+  it('requires both documents.read and students.read for staff document access', () => {
+    const documentsOnly = authContext({
+      institutionId: TENANT_A,
+      permissions: ['documents.read'],
+    });
+    const both = authContext({
+      institutionId: TENANT_A,
+      permissions: ['documents.read', 'students.read'],
+    });
+    expect(hasPermission(documentsOnly, 'documents.read')).toBe(true);
+    expect(hasPermission(documentsOnly, 'students.read')).toBe(false);
+    expect(hasPermission(both, 'documents.read')).toBe(true);
+    expect(hasPermission(both, 'students.read')).toBe(true);
+  });
 });
 
 describe('authorization guards', () => {

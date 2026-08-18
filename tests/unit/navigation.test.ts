@@ -38,4 +38,30 @@ describe('navigation filtering', () => {
     const labels = sections.flatMap((section) => section.items).map((item) => item.label);
     expect(labels).toEqual(['Dashboard']);
   });
+
+  it('shows Admissions to staff who can read applications', () => {
+    const officer = authContext({ institutionId: 'inst-a', roleKeys: ['ADMISSIONS_OFFICER'] });
+    const labels = filterNavigation(INSTITUTION_NAV, officer)
+      .flatMap((section) => section.items)
+      .map((item) => item.label);
+
+    expect(labels).toContain('Admissions');
+    expect(labels).toContain('Students');
+  });
+
+  it('marks Admissions as a shipped destination', () => {
+    const admissions = INSTITUTION_NAV.flatMap((section) => section.items).find(
+      (item) => item.href === '/admissions',
+    );
+    expect(admissions?.planned).toBeFalsy();
+  });
+
+  it('hides Admissions from a student session', () => {
+    const student = authContext({ institutionId: 'inst-a', roleKeys: ['STUDENT'] });
+    const labels = filterNavigation(INSTITUTION_NAV, student)
+      .flatMap((section) => section.items)
+      .map((item) => item.label);
+    expect(labels).not.toContain('Admissions');
+    expect(labels).not.toContain('Students');
+  });
 });
