@@ -42,6 +42,8 @@ export const PERMISSIONS = {
   'admissions.read': 'View applications',
   'admissions.review': 'Review applications',
   'admissions.approve': 'Approve or reject applications',
+  'admissions.offer': 'Issue admission offers',
+  'admissions.register': 'Register an accepted applicant as a student',
 
   // Staff
   'staff.read': 'View staff',
@@ -166,6 +168,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'admissions.read',
     'admissions.review',
     'admissions.approve',
+    'admissions.offer',
+    'admissions.register',
     'staff.read',
     'timetable.read',
     'timetable.manage',
@@ -248,6 +252,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
     'students.update',
     'admissions.read',
     'admissions.review',
+    'admissions.offer',
+    'admissions.register',
     'documents.read',
     'documents.manage',
     'notifications.read',
@@ -256,14 +262,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<RoleKey, readonly Permission[]> = 
 
   STAFF: ['institution.read', 'programmes.read', 'units.read', 'timetable.read', 'notifications.read'],
 
-  STUDENT: [
-    'timetable.read',
-    'attendance.read',
-    'results.read',
-    'finance.read',
-    'documents.read',
-    'notifications.read',
-  ],
+  STUDENT: ['timetable.read', 'attendance.read', 'results.read', 'finance.read', 'notifications.read'],
 };
 
 export const ROLE_LABELS: Record<RoleKey, string> = {

@@ -121,6 +121,30 @@ enum AuditActorType {
   INTEGRATION
 }
 
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  OFFERED
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum DocumentKind {
+  IDENTITY
+  ACADEMIC_CERTIFICATE
+  TRANSCRIPT
+  OFFER_LETTER
+  SUPPORTING
+  OTHER
+}
+
+enum DocumentVisibility {
+  PRIVATE
+  STAFF
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy
 // ---------------------------------------------------------------------------
@@ -175,6 +199,9 @@ model Institution {
   units         Unit[]
   staff         Staff[]
   students      Student[]
+  applications  Application[]
+  admissions    Admission[]
+  documents     Document[]
   auditLogs     AuditLog[]
 
   @@index([status])
@@ -199,11 +226,12 @@ model Campus {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  departments Department[]
-  staff       Staff[]
-  students    Student[]
-  groups      Group[]
+  institution  Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  departments  Department[]
+  staff        Staff[]
+  students     Student[]
+  groups       Group[]
+  applications Application[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -237,11 +265,13 @@ model User {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  institution   Institution? @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  userRoles     UserRole[]
-  staffProfile  Staff?
-  studentRecord Student?
-  auditLogs     AuditLog[]
+  institution            Institution?  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  userRoles              UserRole[]
+  staffProfile           Staff?
+  studentRecord          Student?
+  reviewedApplications   Application[] @relation("ApplicationReviewer")
+  uploadedDocuments      Document[]    @relation("DocumentUploader")
+  auditLogs              AuditLog[]
 
   @@unique([institutionId, email])
   @@index([institutionId])
@@ -411,9 +441,10 @@ model Programme {
   institution Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   department  Department     @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   level       AcademicLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
-  units       Unit[]
-  cohorts     Cohort[]
-  students    Student[]
+  units        Unit[]
+  cohorts      Cohort[]
+  students     Student[]
+  applications Application[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -464,10 +495,11 @@ model Intake {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  institution  Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
-  academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+  institution  Institution   @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  academicYear AcademicYear  @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
   cohorts      Cohort[]
   students     Student[]
+  applications Application[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -531,6 +563,7 @@ model Cohort {
   academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
   groups       Group[]
   students     Student[]
+  admissions   Admission[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -560,6 +593,7 @@ model Group {
   cohort      Cohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
   campus      Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
   students    Student[]
+  admissions  Admission[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -703,6 +737,8 @@ model Student {
   cohort      Cohort?        @relation(fields: [cohortId], references: [id], onDelete: SetNull)
   group       Group?         @relation(fields: [groupId], references: [id], onDelete: SetNull)
   campus      Campus?        @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  admission   Admission?
+  documents   Document[]
 
   @@unique([institutionId, studentNumber])
   @@unique([institutionId, applicationReference])
@@ -714,6 +750,132 @@ model Student {
   @@index([institutionId, intakeId])
   @@index([institutionId, lastName])
   @@map("students")
+}
+
+// ---------------------------------------------------------------------------
+// Admissions
+// ---------------------------------------------------------------------------
+
+/// A public application to an institution. References are unique per tenant
+/// and generated with a non-sequential suffix so they cannot be guessed.
+model Application {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  programmeId   String  @db.Uuid
+  intakeId      String  @db.Uuid
+  campusId      String? @db.Uuid
+
+  /// Tenant-scoped public reference, e.g. APP-2026-K7M2QX.
+  reference String
+  status    ApplicationStatus @default(DRAFT)
+
+  firstName   String
+  middleName  String?
+  lastName    String
+  email       String
+  phone       String?
+  dateOfBirth DateTime? @db.Date
+  gender      Gender?
+  nationalId  String?
+  nationality String    @default("KE")
+
+  addressLine1 String?
+  city         String?
+  county       String?
+  postalCode   String?
+
+  guardianName         String?
+  guardianRelationship String?
+  guardianPhone        String?
+  guardianEmail        String?
+
+  /// SHA-256 hex of the one-time public access token. The raw token is shown
+  /// only at creation so the applicant can resume without an account.
+  accessTokenHash String
+
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  reviewedById String?   @db.Uuid
+  decisionNote String?
+  withdrawnAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  programme   Programme   @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  intake      Intake      @relation(fields: [intakeId], references: [id], onDelete: Restrict)
+  campus      Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
+  reviewedBy  User?       @relation("ApplicationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  admission   Admission?
+  documents   Document[]
+
+  @@unique([institutionId, reference])
+  @@index([institutionId])
+  @@index([institutionId, status])
+  @@index([institutionId, programmeId])
+  @@index([institutionId, intakeId])
+  @@index([institutionId, email])
+  @@map("applications")
+}
+
+/// The offer / registration record that sits between an accepted application
+/// and the resulting Student. Created when an offer is issued.
+model Admission {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  applicationId String  @unique @db.Uuid
+  studentId     String? @unique @db.Uuid
+  cohortId      String? @db.Uuid
+  groupId       String? @db.Uuid
+
+  offerIssuedAt   DateTime
+  offerExpiresAt  DateTime?
+  offerAcceptedAt DateTime?
+  registeredAt    DateTime?
+  conditions      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  student     Student?    @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  cohort      Cohort?     @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  group       Group?      @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId])
+  @@map("admissions")
+}
+
+/// Metadata for a private file. Bytes live in object storage (or the local
+/// disk adapter); PostgreSQL never stores the payload.
+model Document {
+  id            String  @id @default(uuid(7)) @db.Uuid
+  institutionId String  @db.Uuid
+  applicationId String? @db.Uuid
+  studentId     String? @db.Uuid
+  uploadedById  String? @db.Uuid
+
+  kind       DocumentKind
+  fileName   String
+  mimeType   String
+  byteSize   Int
+  storageKey String
+  checksum   String?
+  visibility DocumentVisibility @default(PRIVATE)
+
+  createdAt DateTime @default(now())
+
+  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  application Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  student     Student?     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  uploadedBy  User?        @relation("DocumentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([institutionId])
+  @@index([institutionId, applicationId])
+  @@index([institutionId, studentId])
+  @@map("documents")
 }
 
 // ---------------------------------------------------------------------------

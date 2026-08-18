@@ -17,6 +17,7 @@ import {
   permissionModule,
   type RoleKey,
 } from '../src/lib/auth/permissions';
+import { hashAccessToken } from '../src/server/admissions/references';
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 if (!connectionString) throw new Error('DATABASE_URL must be set to seed the database.');
@@ -503,6 +504,51 @@ async function seedInstitution(spec: DemoInstitutionSpec): Promise<void> {
       },
       update: {},
     });
+  }
+
+  const demoApplications: { first: string; last: string; status: 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'OFFERED' }[] =
+    [
+      { first: 'Naomi', last: 'Otieno', status: 'DRAFT' },
+      { first: 'Peter', last: 'Wanjiku', status: 'SUBMITTED' },
+      { first: 'Quincy', last: 'Mutiso', status: 'UNDER_REVIEW' },
+      { first: 'Rose', last: 'Nyambura', status: 'OFFERED' },
+    ];
+
+  for (const [index, applicant] of demoApplications.entries()) {
+    const reference = `APP-2026-${spec.slug.slice(0, 4).toUpperCase()}-D${String(index + 1).padStart(3, '0')}`;
+    const existing = await prisma.application.findFirst({ where: { institutionId, reference } });
+    if (existing) continue;
+
+    const application = await prisma.application.create({
+      data: {
+        institutionId,
+        programmeId: primaryProgrammeId,
+        intakeId: intakeIds.get('SEP2026') as string,
+        campusId: campus.id,
+        reference,
+        status: applicant.status,
+        firstName: applicant.first,
+        lastName: applicant.last,
+        email: `${applicant.first.toLowerCase()}.${applicant.last.toLowerCase()}@apply.${spec.emailDomain}`,
+        phone: '+254733000000',
+        accessTokenHash: hashAccessToken(`demo-token-${spec.slug}-${index}`),
+        submittedAt: applicant.status === 'DRAFT' ? null : new Date('2026-03-01'),
+      },
+    });
+
+    if (applicant.status === 'OFFERED') {
+      await prisma.admission.create({
+        data: {
+          institutionId,
+          applicationId: application.id,
+          cohortId: cohort.id,
+          groupId: groupIds[0],
+          offerIssuedAt: new Date('2026-03-15'),
+          offerExpiresAt: new Date('2026-04-15'),
+          conditions: 'Provide original certificates at registration.',
+        },
+      });
+    }
   }
 
   await prisma.auditLog.create({
