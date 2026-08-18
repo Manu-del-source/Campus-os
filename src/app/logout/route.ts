@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
 
 import { recordAudit } from '@/lib/audit';
+import { clearSessionCookie, readSessionToken } from '@/lib/auth/cookies';
+import { revokeSessionByToken } from '@/lib/auth/credentials';
 import { getCurrentUser } from '@/lib/auth/session';
 import { publicEnv } from '@/lib/env';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
- * Sign-out. Implemented as a route handler so the session cookies are cleared
- * server-side; the browser never manages authorization state itself.
+ * Sign-out. Implemented as a route handler so the session cookie is cleared
+ * server-side and the matching session row is revoked.
  */
 export async function GET(): Promise<NextResponse> {
   const context = await getCurrentUser();
-  const supabase = await createSupabaseServerClient();
+  const token = await readSessionToken();
 
   if (context) {
     await recordAudit(context, {
@@ -22,7 +23,16 @@ export async function GET(): Promise<NextResponse> {
     });
   }
 
-  await supabase?.auth.signOut();
+  await revokeSessionByToken(token);
+  await clearSessionCookie();
 
-  return NextResponse.redirect(new URL('/login', publicEnv.NEXT_PUBLIC_APP_URL));
+  const response = NextResponse.redirect(new URL('/login', publicEnv.NEXT_PUBLIC_APP_URL));
+  response.cookies.set('campusos_session', '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  });
+  return response;
 }

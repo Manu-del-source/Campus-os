@@ -31,6 +31,7 @@ export async function resetDatabase(): Promise<void> {
       "audit_logs", "documents", "admissions", "applications", "students", "staff",
       "units", "groups", "cohorts", "semesters", "intakes", "academic_years",
       "programmes", "academic_levels", "departments", "user_roles", "role_permissions",
+      "password_reset_tokens", "sessions",
       "roles", "permissions", "users", "campuses", "institutions"
     RESTART IDENTITY CASCADE;
   `);
@@ -38,7 +39,7 @@ export async function resetDatabase(): Promise<void> {
 
 /**
  * Builds an auth context directly. Tests exercise server code the same way a
- * request would, but without needing a live Supabase session.
+ * request would, without needing a live session cookie.
  */
 export function authContext(overrides: {
   userId?: string;
@@ -54,7 +55,6 @@ export function authContext(overrides: {
 
   return {
     userId: overrides.userId ?? '00000000-0000-4000-8000-000000000001',
-    authUserId: null,
     email: 'tester@example.test',
     firstName: 'Test',
     lastName: 'User',

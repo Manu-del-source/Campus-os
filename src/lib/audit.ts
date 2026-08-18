@@ -15,8 +15,11 @@ import type { AuthContext } from '@/lib/auth/types';
 
 export type AuditAction =
   | 'auth.login'
+  | 'auth.login_failed'
   | 'auth.logout'
   | 'auth.password_reset_requested'
+  | 'auth.password_reset_completed'
+  | 'auth.password_changed'
   | 'institution.created'
   | 'institution.updated'
   | 'institution.settings_updated'

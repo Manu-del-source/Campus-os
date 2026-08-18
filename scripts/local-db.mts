@@ -3,7 +3,7 @@
  *
  * Spins up an embedded PostgreSQL instance so contributors can run migrations,
  * seeds and integration tests without Docker or a hosted database. Production
- * and preview environments use Supabase Postgres instead.
+ * and preview environments use Neon PostgreSQL instead.
  *
  *   tsx scripts/local-db.ts start
  *   tsx scripts/local-db.ts stop

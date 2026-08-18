@@ -3,15 +3,12 @@
 import { useState, type FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { requestPasswordResetAction, signInAction } from '@/server/auth/actions';
+import { resetPasswordAction } from '@/server/auth/actions';
 
-/**
- * Sign-in form. Credentials are posted to a server action; the session cookie
- * is issued only after a successful server-side password check.
- */
-export function LoginForm() {
-  const [email, setEmail] = useState('');
+export function ResetPasswordForm({ token }: { token: string }) {
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [tokenValue, setTokenValue] = useState(token);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -21,44 +18,21 @@ export function LoginForm() {
     setError(null);
     setNotice(null);
     setPending(true);
-
     try {
       const formData = new FormData();
-      formData.set('email', email);
+      formData.set('token', tokenValue);
       formData.set('password', password);
-      const result = await signInAction(formData);
+      formData.set('confirm', confirm);
+      const result = await resetPasswordAction(formData);
       if (!result.ok) {
-        setError(result.error ?? 'Those credentials did not match an active account.');
-      }
-    } catch (error) {
-      // Next.js throws on redirect(); treat that as success.
-      if (error && typeof error === 'object' && 'digest' in error) {
+        setError(result.error ?? 'Unable to reset the password.');
         return;
       }
-      setError('Sign-in is unavailable right now. Please try again shortly.');
+      setNotice(result.notice ?? 'Your password has been updated.');
+    } catch {
+      setError('Unable to reset the password right now.');
     } finally {
       setPending(false);
-    }
-  }
-
-  async function onResetPassword() {
-    setError(null);
-    setNotice(null);
-    if (!email) {
-      setError('Enter your email address first, then request a reset link.');
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.set('email', email);
-      const result = await requestPasswordResetAction(formData);
-      if (!result.ok) {
-        setError(result.error ?? 'Password reset is unavailable right now.');
-        return;
-      }
-      setNotice(result.notice ?? 'If that address has an account, a reset link is on its way.');
-    } catch {
-      setError('Password reset is unavailable right now.');
     }
   }
 
@@ -76,48 +50,57 @@ export function LoginForm() {
       ) : null}
 
       <div className="space-y-1.5">
-        <label htmlFor="email" className="text-sm font-medium">
-          Email address
+        <label htmlFor="token" className="text-sm font-medium">
+          Reset token
         </label>
         <input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
+          id="token"
+          name="token"
+          type="text"
           required
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          value={tokenValue}
+          onChange={(event) => setTokenValue(event.target.value)}
           className="h-10 w-full rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm"
         />
       </div>
 
       <div className="space-y-1.5">
         <label htmlFor="password" className="text-sm font-medium">
-          Password
+          New password
         </label>
         <input
           id="password"
           name="password"
           type="password"
-          autoComplete="current-password"
+          autoComplete="new-password"
           required
+          minLength={10}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="h-10 w-full rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm"
         />
       </div>
 
-      <Button type="submit" className="w-full" disabled={pending}>
-        {pending ? 'Signing in…' : 'Sign in'}
-      </Button>
+      <div className="space-y-1.5">
+        <label htmlFor="confirm" className="text-sm font-medium">
+          Confirm password
+        </label>
+        <input
+          id="confirm"
+          name="confirm"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={10}
+          value={confirm}
+          onChange={(event) => setConfirm(event.target.value)}
+          className="h-10 w-full rounded-[var(--radius-base)] border border-[var(--color-border)] bg-[var(--color-surface)] px-3 text-sm"
+        />
+      </div>
 
-      <button
-        type="button"
-        onClick={onResetPassword}
-        className="text-sm text-[var(--color-muted-foreground)] underline-offset-4 hover:underline"
-      >
-        Forgot your password?
-      </button>
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? 'Updating…' : 'Update password'}
+      </Button>
     </form>
   );
 }

@@ -10,25 +10,33 @@ import {
   requirePlatformAdmin as assertPlatformAdmin,
   requireRole as assertRole,
 } from '@/lib/auth/authorization';
+import { readSessionToken } from '@/lib/auth/cookies';
+import { sha256Hex } from '@/lib/auth/crypto';
 import { isRoleKey, type Permission, type RoleKey } from '@/lib/auth/permissions';
 import type { AuthContext, TenantSummary } from '@/lib/auth/types';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
-import { serverEnv } from '@/lib/env';
 
 /**
  * Session and tenant resolution.
  *
- * The authenticated identity comes from Supabase Auth; roles, permissions and
- * — critically — the active institution are then loaded from PostgreSQL.
- * A tenant id supplied by the client is never trusted or even read.
+ * The authenticated identity comes from a first-party session cookie whose
+ * hash is looked up in PostgreSQL. Roles, permissions and the active
+ * institution are loaded from the same database. A tenant id supplied by the
+ * client is never trusted or even read.
  */
 
-type UserWithRoles = Awaited<ReturnType<typeof loadUser>>;
+type UserWithRoles = Awaited<ReturnType<typeof loadUserById>>;
 
-async function loadUser(where: { authUserId: string } | { email: string }) {
+async function loadUserById(id: string) {
   return prisma.user.findFirst({
-    where: { ...where, deletedAt: null },
-    include: {
+    where: { id, deletedAt: null },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      isPlatformAdmin: true,
+      institutionId: true,
+      status: true,
       institution: true,
       userRoles: {
         include: {
@@ -60,7 +68,6 @@ function toAuthContext(user: NonNullable<UserWithRoles>): AuthContext {
   const permissions = new Set<Permission>();
 
   for (const assignment of user.userRoles) {
-    // Institution-scoped role assignments must match the user's tenant.
     if (assignment.institutionId && assignment.institutionId !== user.institutionId) continue;
     if (isRoleKey(assignment.role.key)) roleKeys.push(assignment.role.key);
     for (const grant of assignment.role.rolePermissions) {
@@ -70,7 +77,6 @@ function toAuthContext(user: NonNullable<UserWithRoles>): AuthContext {
 
   return {
     userId: user.id,
-    authUserId: user.authUserId,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
@@ -82,29 +88,27 @@ function toAuthContext(user: NonNullable<UserWithRoles>): AuthContext {
   };
 }
 
-/**
- * Development-only impersonation used while Supabase credentials are not yet
- * provisioned. It is hard-disabled in production builds.
- */
-async function devFallbackUser(): Promise<UserWithRoles | null> {
-  const email = process.env.CAMPUSOS_DEV_LOGIN_EMAIL;
-  if (!email) return null;
-  if (serverEnv().NODE_ENV === 'production') return null;
-  return loadUser({ email });
-}
-
 async function resolveAuthContext(): Promise<AuthContext | null> {
-  const supabase = await createSupabaseServerClient();
+  const token = await readSessionToken();
+  if (!token) return null;
 
-  if (supabase) {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) return null;
-    const user = await loadUser({ authUserId: data.user.id });
-    return user && user.status === 'ACTIVE' ? toAuthContext(user) : null;
-  }
+  const session = await prisma.session.findUnique({
+    where: { tokenHash: sha256Hex(token) },
+  });
 
-  const fallback = await devFallbackUser();
-  return fallback ? toAuthContext(fallback) : null;
+  if (!session) return null;
+  if (session.revokedAt) return null;
+  if (session.expiresAt.getTime() <= Date.now()) return null;
+
+  const user = await loadUserById(session.userId);
+  if (!user || user.status !== 'ACTIVE') return null;
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { lastUsedAt: new Date() },
+  });
+
+  return toAuthContext(user);
 }
 
 /** Memoised for the lifetime of a single server request. */

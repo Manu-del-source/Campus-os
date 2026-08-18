@@ -3,7 +3,6 @@ import type { Permission, RoleKey } from '@/lib/auth/permissions';
 /** Identity of the caller, resolved on the server from the auth session. */
 export interface AuthContext {
   readonly userId: string;
-  readonly authUserId: string | null;
   readonly email: string;
   readonly firstName: string;
   readonly lastName: string;

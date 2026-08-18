@@ -28,7 +28,9 @@ Schema: `prisma/schema.prisma`. Migrations: `prisma/migrations/`.
 ### Identity & access
 | Model | Notes |
 | --- | --- |
-| `User` | `authUserId` maps to Supabase Auth; `institutionId` null only for platform admins |
+| `User` | `passwordHash` (scrypt); `institutionId` null only for platform admins |
+| `Session` | SHA-256 of the HTTP-only cookie token, expiry and revocation |
+| `PasswordResetToken` | SHA-256 of a one-time reset token with expiry |
 | `Role` | System roles per tenant; `institutionId = null` for the platform role |
 | `Permission` | Global catalogue keyed `module.action` (`students.read`) |
 | `RolePermission` | Role → permission grants |

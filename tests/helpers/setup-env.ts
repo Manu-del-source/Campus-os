@@ -6,6 +6,9 @@ if (process.env.TEST_DATABASE_URL) {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
   process.env.DIRECT_URL = process.env.TEST_DATABASE_URL;
 }
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://campusos:campusos@127.0.0.1:1/campusos';
+}
 if (!process.env.NODE_ENV) {
   Object.assign(process.env, { NODE_ENV: 'test' });
 }

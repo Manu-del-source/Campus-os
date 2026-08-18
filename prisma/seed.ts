@@ -17,7 +17,14 @@ import {
   permissionModule,
   type RoleKey,
 } from '../src/lib/auth/permissions';
+import { hashPassword } from '../src/lib/auth/password';
 import { hashAccessToken } from '../src/server/admissions/references';
+
+/**
+ * Development-only demo password. NEVER use this in production. Seed refuses
+ * to run when NODE_ENV=production unless ALLOW_PRODUCTION_SEED=yes.
+ */
+export const DEV_DEMO_PASSWORD = 'CampusOS-Dev-Only-2026!';
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
 if (!connectionString) throw new Error('DATABASE_URL must be set to seed the database.');
@@ -92,11 +99,17 @@ async function seedUser(
   input: DemoUserInput,
   isPlatformAdmin = false,
 ): Promise<string> {
+  const passwordHash = await hashPassword(DEV_DEMO_PASSWORD);
   const existing = await prisma.user.findFirst({ where: { institutionId, email: input.email } });
   const user = existing
     ? await prisma.user.update({
         where: { id: existing.id },
-        data: { firstName: input.firstName, lastName: input.lastName, status: 'ACTIVE' },
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          status: 'ACTIVE',
+          passwordHash,
+        },
       })
     : await prisma.user.create({
         data: {
@@ -107,6 +120,7 @@ async function seedUser(
           status: 'ACTIVE',
           isPlatformAdmin,
           emailVerifiedAt: new Date(),
+          passwordHash,
         },
       });
 
@@ -587,7 +601,8 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n${DEMO_TAG}`);
-  console.log('Demo sign-in identities (create matching Supabase Auth users to log in):');
+  console.log('Development-only first-party login (hashed in PostgreSQL, never a production default):');
+  console.log(`  password for every seeded user: ${DEV_DEMO_PASSWORD}`);
   console.log('  platform-admin@campusos.example                 PLATFORM_ADMIN');
   for (const spec of DEMO_INSTITUTIONS) {
     console.log(`  admin@${spec.emailDomain}       INSTITUTION_ADMIN (${spec.name})`);
