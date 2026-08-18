@@ -88,7 +88,8 @@ Supabase (or any PostgreSQL + GoTrue-compatible stack).
 
 ## Roadmap after the foundation
 
-Phases are built one at a time, each with schema, server module, UI and tests:
-institution administration → academic foundation → students & admissions →
-staff → timetable & attendance → examinations/results → finance (with the M-Pesa
-integration boundary) → subscriptions and usage metering.
+Phases are built one at a time, each with schema, server module, UI and tests.
+Students & admissions is shipped (`docs/admissions.md`). Next: institution
+administration and academic administration, then staff, timetable & attendance,
+examinations/results, finance (with the M-Pesa integration boundary), and
+subscriptions.
