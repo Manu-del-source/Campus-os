@@ -36,7 +36,7 @@ place — `src/server/platform/**` — where aggregates are computed after
 | `tenantWhere(ctx)` | `{ institutionId }` filter for Prisma |
 | `assertTenantAccess(ctx, record)` | second line of defence for lookups by id |
 
-`src/lib/auth/session.ts` (server-only) resolves the context from Supabase Auth +
+`src/lib/auth/session.ts` (server-only) resolves the context from native database sessions +
 PostgreSQL and exposes the async wrappers `getCurrentUser()`,
 `getCurrentInstitution()`, `requireUser()`, `requirePermission()`,
 `requireRole()`, `requirePlatformAdmin()`, `requireInstitution()`.

@@ -17,6 +17,7 @@ import {
   permissionModule,
   type RoleKey,
 } from '../src/lib/auth/permissions';
+import { hashPassword } from '../src/lib/auth/password';
 import { hashAccessToken } from '../src/server/admissions/references';
 
 const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL;
@@ -25,6 +26,32 @@ if (!connectionString) throw new Error('DATABASE_URL must be set to seed the dat
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 const DEMO_TAG = 'DEMO DATA — fictional, for development only';
+
+const DEMO_CREDENTIALS: Record<string, string> = {
+  'admin@demo-college.example': 'DemoAdmin123!',
+  'principal@demo-college.example': 'DemoPrincipal123!',
+  'registrar@demo-college.example': 'DemoRegistrar123!',
+  'finance@demo-college.example': 'DemoFinance123!',
+  'exams@demo-college.example': 'DemoExams123!',
+  'hod@demo-college.example': 'DemoHod123!',
+  'lecturer@demo-college.example': 'DemoLecturer123!',
+  'admissions@demo-college.example': 'DemoAdmissions123!',
+  'platform-admin@campusos.example': 'DemoPlatform123!',
+};
+
+const DEFAULT_ROLE_PASSWORDS: Record<RoleKey, string> = {
+  PLATFORM_ADMIN: 'DemoPlatform123!',
+  INSTITUTION_ADMIN: 'DemoAdmin123!',
+  PRINCIPAL: 'DemoPrincipal123!',
+  REGISTRAR: 'DemoRegistrar123!',
+  FINANCE_OFFICER: 'DemoFinance123!',
+  EXAM_OFFICER: 'DemoExams123!',
+  HOD: 'DemoHod123!',
+  LECTURER: 'DemoLecturer123!',
+  ADMISSIONS_OFFICER: 'DemoAdmissions123!',
+  STUDENT: 'DemoStudent123!',
+  STAFF: 'DemoStaff123!',
+};
 
 async function seedPermissions(): Promise<void> {
   for (const key of ALL_PERMISSIONS) {
@@ -84,6 +111,7 @@ interface DemoUserInput {
   firstName: string;
   lastName: string;
   role: RoleKey;
+  password?: string;
 }
 
 async function seedUser(
@@ -92,11 +120,19 @@ async function seedUser(
   input: DemoUserInput,
   isPlatformAdmin = false,
 ): Promise<string> {
+  const plainPassword = input.password ?? DEMO_CREDENTIALS[input.email] ?? DEFAULT_ROLE_PASSWORDS[input.role] ?? 'DemoAdmin123!';
+  const passwordHash = await hashPassword(plainPassword);
+
   const existing = await prisma.user.findFirst({ where: { institutionId, email: input.email } });
   const user = existing
     ? await prisma.user.update({
         where: { id: existing.id },
-        data: { firstName: input.firstName, lastName: input.lastName, status: 'ACTIVE' },
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          status: 'ACTIVE',
+          passwordHash,
+        },
       })
     : await prisma.user.create({
         data: {
@@ -104,6 +140,7 @@ async function seedUser(
           email: input.email,
           firstName: input.firstName,
           lastName: input.lastName,
+          passwordHash,
           status: 'ACTIVE',
           isPlatformAdmin,
           emailVerifiedAt: new Date(),
@@ -578,7 +615,13 @@ async function main(): Promise<void> {
   await seedUser(
     null,
     platformRoles,
-    { email: 'platform-admin@campusos.example', firstName: 'Pat', lastName: 'Platform', role: 'PLATFORM_ADMIN' },
+    {
+      email: 'platform-admin@campusos.example',
+      firstName: 'Pat',
+      lastName: 'Platform',
+      role: 'PLATFORM_ADMIN',
+      password: DEMO_CREDENTIALS['platform-admin@campusos.example'],
+    },
     true,
   );
 
@@ -587,11 +630,18 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n${DEMO_TAG}`);
-  console.log('Demo sign-in identities (create matching Supabase Auth users to log in):');
-  console.log('  platform-admin@campusos.example                 PLATFORM_ADMIN');
-  for (const spec of DEMO_INSTITUTIONS) {
-    console.log(`  admin@${spec.emailDomain}       INSTITUTION_ADMIN (${spec.name})`);
-  }
+  console.log('Demo sign-in credentials (development only):');
+  console.log('  Platform Administrator:');
+  console.log('    platform-admin@campusos.example / DemoPlatform123!');
+  console.log('  Demo College:');
+  console.log('    admin@demo-college.example / DemoAdmin123!');
+  console.log('    principal@demo-college.example / DemoPrincipal123!');
+  console.log('    registrar@demo-college.example / DemoRegistrar123!');
+  console.log('    finance@demo-college.example / DemoFinance123!');
+  console.log('    exams@demo-college.example / DemoExams123!');
+  console.log('    hod@demo-college.example / DemoHod123!');
+  console.log('    lecturer@demo-college.example / DemoLecturer123!');
+  console.log('    admissions@demo-college.example / DemoAdmissions123!');
 }
 
 main()

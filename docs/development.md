@@ -9,10 +9,10 @@
 
 ```bash
 npm install
-cp .env.example .env      # fill in DATABASE_URL / DIRECT_URL (and Supabase keys if available)
+cp .env.example .env      # fill in DATABASE_URL / DIRECT_URL
 npm run db:generate       # generate the Prisma client into src/generated/prisma
 npm run db:deploy         # apply migrations
-npm run db:seed           # demo data (development only)
+npm run db:seed           # demo data with Argon2id credentials (development only)
 npm run dev
 ```
 
@@ -34,11 +34,11 @@ DATABASE_URL="postgresql://campusos:campusos@127.0.0.1:55432/campusos"
 DIRECT_URL="postgresql://campusos:campusos@127.0.0.1:55432/campusos"
 ```
 
-### Working without Supabase credentials
+### Dev login convenience
 
 Set `CAMPUSOS_DEV_LOGIN_EMAIL` to a seeded user (for example
-`admin@demo-college.example`) to browse the institution workspace without an auth
-provider. The switch is ignored when `NODE_ENV=production`.
+`admin@demo-college.example`) to browse the institution workspace without entering credentials.
+The switch is ignored when `NODE_ENV=production`. Or sign in via `/login` with any seeded demo credentials.
 
 ## Scripts
 

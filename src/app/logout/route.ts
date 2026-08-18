@@ -1,17 +1,15 @@
 import { NextResponse } from 'next/server';
 
 import { recordAudit } from '@/lib/audit';
-import { getCurrentUser } from '@/lib/auth/session';
+import { getCurrentUser, logout } from '@/lib/auth/session';
 import { publicEnv } from '@/lib/env';
-import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /**
- * Sign-out. Implemented as a route handler so the session cookies are cleared
- * server-side; the browser never manages authorization state itself.
+ * Sign-out route handler. Revokes the database session record and clears the
+ * secure HttpOnly session cookie on the server.
  */
-export async function GET(): Promise<NextResponse> {
+async function handleLogout(): Promise<NextResponse> {
   const context = await getCurrentUser();
-  const supabase = await createSupabaseServerClient();
 
   if (context) {
     await recordAudit(context, {
@@ -22,7 +20,15 @@ export async function GET(): Promise<NextResponse> {
     });
   }
 
-  await supabase?.auth.signOut();
+  await logout();
 
   return NextResponse.redirect(new URL('/login', publicEnv.NEXT_PUBLIC_APP_URL));
+}
+
+export async function GET(): Promise<NextResponse> {
+  return handleLogout();
+}
+
+export async function POST(): Promise<NextResponse> {
+  return handleLogout();
 }
