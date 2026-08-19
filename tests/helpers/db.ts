@@ -9,7 +9,10 @@ import { DEFAULT_ROLE_PERMISSIONS, type Permission, type RoleKey } from '@/lib/a
  * — the same one used for development. There is no separate test database URL.
  *
  * WARNING: `resetDatabase()` below truncates application tables in that
- * database.
+ * database. Every integration suite calls it independently, so those files
+ * must not run concurrently (see `fileParallelism` / `maxWorkers` in
+ * vitest.config.ts). A second suite truncating while this one is mid-seed
+ * produces foreign-key failures on institution-owned rows.
  */
 export const databaseUrl = process.env.DATABASE_URL;
 /** @deprecated Kept for compatibility; always derives from `DATABASE_URL`. */
