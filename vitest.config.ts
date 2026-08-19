@@ -16,5 +16,10 @@ export default defineConfig({
     setupFiles: ['tests/helpers/setup-env.ts'],
     include: ['tests/**/*.test.ts'],
     testTimeout: 30_000,
+    // Integration suites share one DATABASE_URL and each calls resetDatabase().
+    // Parallel workers race TRUNCATE against seedTenant() inserts (FK violations)
+    // and can stall hooks until they time out. One worker, one file at a time.
+    fileParallelism: false,
+    maxWorkers: 1,
   },
 });

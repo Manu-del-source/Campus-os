@@ -107,7 +107,9 @@ skipped.
 > each suite calls `resetDatabase()`, which truncates the application tables
 > (institutions, users, sessions, students, …) before and after it runs. Point
 > `DATABASE_URL` only at a development database whose contents are expendable,
-> and never run the tests against production.
+> and never run the tests against production. Vitest runs those files in a
+> single worker (`fileParallelism: false`) so one suite cannot truncate the
+> database while another is still inserting tenant rows.
 
 `npm test` is non-destructive at the *lifecycle* level: the global setup only
 verifies the connection and applies pending migrations (`scripts/migrate.mts
