@@ -4,16 +4,24 @@ import { PrismaClient } from '@/generated/prisma/client';
 import type { AuthContext } from '@/lib/auth/types';
 import { DEFAULT_ROLE_PERMISSIONS, type Permission, type RoleKey } from '@/lib/auth/permissions';
 
-/** Integration tests only run when a disposable PostgreSQL database is provided. */
-export const testDatabaseUrl = process.env.TEST_DATABASE_URL;
-export const hasTestDatabase = Boolean(testDatabaseUrl);
+/**
+ * Integration tests run against the single configured database, `DATABASE_URL`
+ * — the same one used for development. There is no separate test database URL.
+ *
+ * WARNING: `resetDatabase()` below truncates application tables in that
+ * database.
+ */
+export const databaseUrl = process.env.DATABASE_URL;
+/** @deprecated Kept for compatibility; always derives from `DATABASE_URL`. */
+export const testDatabaseUrl = databaseUrl;
+export const hasTestDatabase = Boolean(databaseUrl);
 
 let client: PrismaClient | null = null;
 
 export function testPrisma(): PrismaClient {
-  if (!testDatabaseUrl) throw new Error('TEST_DATABASE_URL is not configured.');
+  if (!databaseUrl) throw new Error('DATABASE_URL is not configured.');
   if (!client) {
-    client = new PrismaClient({ adapter: new PrismaPg({ connectionString: testDatabaseUrl }) });
+    client = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   }
   return client;
 }

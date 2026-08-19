@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:reset": "npm run db:reset && npm test && npm run db:seed",
     "db:generate": "PRISMA_SCHEMA_ENGINE_BINARY=${PRISMA_SCHEMA_ENGINE_BINARY:-/bin/true} prisma generate",
     "db:migrate": "tsx --env-file-if-exists=.env scripts/migrate.mts",
     "db:deploy": "tsx --env-file-if-exists=.env scripts/migrate.mts deploy",

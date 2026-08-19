@@ -48,7 +48,8 @@ The switch is ignored when `NODE_ENV=production`. Or sign in via `/login` with a
 | `npm run build` / `npm start` | Production build / serve |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Vitest (unit + integration) |
+| `npm test` | Vitest (unit + integration) against `DATABASE_URL` — non-destructive lifecycle |
+| `npm run test:reset` | **Destructive**: `db:reset`, then `npm test`, then `db:seed` |
 | `npm run db:generate` | Prisma client generation |
 | `npm run db:migrate create <name>` | Create a migration from schema changes |
 | `npm run db:deploy` | Apply pending migrations |
@@ -87,14 +88,39 @@ PRISMA_SCHEMA_ENGINE_BINARY=$PWD/.prisma-offline/schema-engine npm run db:genera
 
 ## Testing
 
+CampusOS uses **one database URL** for development and integration testing:
+`DATABASE_URL` (with `DIRECT_URL` for migrations, defaulted from `DATABASE_URL`
+when unset). There is no `TEST_DATABASE_URL`.
+
 ```bash
-npm test                                   # unit tests only
-TEST_DATABASE_URL="postgresql://campusos:campusos@127.0.0.1:55432/campusos_test" npm test
+npm test          # unit + integration tests against DATABASE_URL
+npm run test:watch
+npm run test:reset  # DESTRUCTIVE: db:reset, then npm test, then db:seed
 ```
 
-Integration tests skip themselves when `TEST_DATABASE_URL` is absent, so unit
-tests always run. The global setup applies migrations to the test database; each
-suite truncates before and after itself.
+The test runner loads `.env` (also `.env.local` / `.env.test` / `.env.test.local`,
+without overriding variables already exported) and fails fast with an actionable
+message when `DATABASE_URL` is missing — integration tests are never silently
+skipped.
+
+> **Danger — data loss.** Integration tests run against `DATABASE_URL` itself and
+> each suite calls `resetDatabase()`, which truncates the application tables
+> (institutions, users, sessions, students, …) before and after it runs. Point
+> `DATABASE_URL` only at a development database whose contents are expendable,
+> and never run the tests against production.
+
+`npm test` is non-destructive at the *lifecycle* level: the global setup only
+verifies the connection and applies pending migrations (`scripts/migrate.mts
+deploy`). It never drops the schema. Dropping and rebuilding the database stays
+explicit:
+
+```bash
+npm run db:reset     # drop everything, re-apply migrations
+npm run db:seed      # restore demo data (Argon2id credentials)
+```
+
+Re-seed after a test run when you want the demo login credentials back
+(`npm run db:seed`).
 
 `tests/integration/tenant-isolation.test.ts` is mandatory: a user from
 Institution A must never retrieve Institution B data. Do not merge a change that
