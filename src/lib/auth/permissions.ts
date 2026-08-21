@@ -58,10 +58,12 @@ export const PERMISSIONS = {
   'attendance.record': 'Record attendance',
 
   // Assessment and results
+  'marks.read': 'View assessments and marks',
   'marks.enter': 'Enter marks',
   'marks.submit': 'Submit marks for verification',
   'marks.verify': 'Verify submitted marks',
   'results.read': 'View results',
+  'results.verify': 'Verify results',
   'results.approve': 'Approve results',
   'results.publish': 'Publish results',
 

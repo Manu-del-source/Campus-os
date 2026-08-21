@@ -115,6 +115,93 @@ enum UnitType {
   PROJECT
 }
 
+enum RegistrationStatus {
+  PENDING
+  CONFIRMED
+  DROPPED
+  WITHDRAWN
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum AssessmentType {
+  EXAM
+  ASSIGNMENT
+  QUIZ
+  PROJECT
+  PRACTICAL
+  COURSEWORK
+  PRESENTATION
+  OTHER
+}
+
+enum AssessmentStatus {
+  DRAFT
+  PUBLISHED
+  SUBMISSION_OPEN
+  SUBMISSION_CLOSED
+  GRADED
+  PUBLISHED_RESULTS
+}
+
+enum MarkStatus {
+  DRAFT
+  SUBMITTED
+  VERIFIED
+  APPROVED
+  PUBLISHED
+}
+
+enum ResultStatus {
+  PENDING
+  CALCULATED
+  VERIFIED
+  APPROVED
+  PUBLISHED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  PARTIALLY_PAID
+  OVERDUE
+  CANCELLED
+  VOID
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  MPESA
+  CARD
+  CHEQUE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
 enum AuditActorType {
   USER
   SYSTEM
@@ -203,6 +290,23 @@ model Institution {
   admissions    Admission[]
   documents     Document[]
   auditLogs     AuditLog[]
+  unitRegistrations UnitRegistration[]
+  rooms         Room[]
+  timetableEntries TimetableEntry[]
+  attendanceSessions AttendanceSession[]
+  attendanceRecords AttendanceRecord[]
+  assessments   Assessment[]
+  marks         Mark[]
+  results       Result[]
+  feeStructures FeeStructure[]
+  feeItems      FeeItem[]
+  invoices      Invoice[]
+  invoiceItems  InvoiceItem[]
+  payments      Payment[]
+  paymentAllocations PaymentAllocation[]
+  receipts      Receipt[]
+  notifications Notification[]
+  subscription Subscription?
 
   @@index([status])
   @@map("institutions")
@@ -274,6 +378,13 @@ model User {
   reviewedApplications   Application[] @relation("ApplicationReviewer")
   uploadedDocuments      Document[]    @relation("DocumentUploader")
   auditLogs              AuditLog[]
+  attendanceMarked       AttendanceRecord[]
+  marksGraded            Mark[]
+  resultsVerified        Result[] @relation("ResultsVerified")
+  resultsApproved        Result[] @relation("ResultsApproved")
+  confirmedPayments      Payment[]
+  notifications          Notification[]
+  subscriptionEvents     SubscriptionEvent[]
 
   @@unique([institutionId, email])
   @@index([institutionId])
@@ -464,6 +575,7 @@ model Programme {
   cohorts      Cohort[]
   students     Student[]
   applications Application[]
+  feeStructures FeeStructure[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -491,6 +603,7 @@ model AcademicYear {
   intakes     Intake[]
   semesters   Semester[]
   cohorts     Cohort[]
+  feeStructures FeeStructure[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -547,6 +660,11 @@ model Semester {
   institution  Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
   academicYear AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Cascade)
   units        Unit[]
+  unitRegistrations UnitRegistration[]
+  timetableEntries TimetableEntry[]
+  assessments Assessment[]
+  results     Result[]
+  invoices    Invoice[]
 
   @@unique([institutionId, code])
   @@unique([academicYearId, sequence])
@@ -583,6 +701,7 @@ model Cohort {
   groups       Group[]
   students     Student[]
   admissions   Admission[]
+  feeStructures FeeStructure[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -613,6 +732,7 @@ model Group {
   campus      Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
   students    Student[]
   admissions  Admission[]
+  timetableEntries TimetableEntry[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -646,6 +766,10 @@ model Unit {
   programme   Programme      @relation(fields: [programmeId], references: [id], onDelete: Cascade)
   level       AcademicLevel? @relation(fields: [levelId], references: [id], onDelete: SetNull)
   semester    Semester?      @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+  registrations UnitRegistration[]
+  timetableEntries TimetableEntry[]
+  assessments Assessment[]
+  results     Result[]
 
   @@unique([institutionId, code])
   @@index([institutionId])
@@ -690,6 +814,7 @@ model Staff {
   department      Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   campus          Campus?     @relation(fields: [campusId], references: [id], onDelete: SetNull)
   headsDepartment Department? @relation("DepartmentHead")
+  timetableEntries TimetableEntry[]
 
   @@unique([institutionId, staffNumber])
   @@unique([institutionId, email])
@@ -758,6 +883,12 @@ model Student {
   campus      Campus?        @relation(fields: [campusId], references: [id], onDelete: SetNull)
   admission   Admission?
   documents   Document[]
+  unitRegistrations UnitRegistration[]
+  attendanceRecords AttendanceRecord[]
+  marks       Mark[]
+  results     Result[]
+  invoices    Invoice[]
+  payments    Payment[]
 
   @@unique([institutionId, studentNumber])
   @@unique([institutionId, applicationReference])
@@ -898,6 +1029,281 @@ model Document {
 }
 
 // ---------------------------------------------------------------------------
+// Unit registration
+// ---------------------------------------------------------------------------
+
+/// Links a student to a unit for a specific semester. This is the enrollment
+/// record that drives timetable, attendance, and assessment eligibility.
+model UnitRegistration {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  studentId     String @db.Uuid
+  unitId        String @db.Uuid
+  semesterId    String @db.Uuid
+
+  status        RegistrationStatus @default(PENDING)
+  registeredAt  DateTime            @default(now())
+  droppedAt     DateTime?
+  withdrawAt    DateTime?
+  dropReason    String?
+  withdrawReason String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  unit        Unit        @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  semester    Semester    @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+
+  @@unique([institutionId, studentId, unitId, semesterId])
+  @@index([institutionId])
+  @@index([institutionId, studentId])
+  @@index([institutionId, unitId])
+  @@index([institutionId, semesterId])
+  @@index([institutionId, status])
+  @@map("unit_registrations")
+}
+
+// ---------------------------------------------------------------------------
+// Timetable
+// ---------------------------------------------------------------------------
+
+/// Physical or virtual room. Tenant-scoped.
+model Room {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+
+  code     String
+  name     String
+  building String?
+  floor    Int?
+  capacity Int?
+  roomType String?  @default("CLASSROOM")
+  isActive Boolean  @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution      @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  entries     TimetableEntry[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@map("rooms")
+}
+
+/// A scheduled recurring class session. The timetable module validates that
+/// no lecturer, room, or group is double-booked before saving.
+model TimetableEntry {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  semesterId    String @db.Uuid
+  unitId        String @db.Uuid
+  staffId       String @db.Uuid
+  roomId        String @db.Uuid
+  groupId       String @db.Uuid
+
+  dayOfWeek  DayOfWeek
+  startTime  DateTime @db.Time
+  endTime    DateTime @db.Time
+  weekStart  Int?  @default(1)
+  weekEnd    Int?
+  isActive   Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution         @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  semester    Semester            @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  unit        Unit                @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  staff       Staff               @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  room        Room                @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  group       Group               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  sessions    AttendanceSession[]
+
+  @@index([institutionId])
+  @@index([institutionId, semesterId])
+  @@index([institutionId, staffId])
+  @@index([institutionId, roomId])
+  @@index([institutionId, groupId])
+  @@index([institutionId, unitId])
+  @@map("timetable_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+/// A specific occurrence of a timetable entry (e.g. Monday 9am on a given date).
+model AttendanceSession {
+  id               String @id @default(uuid(7)) @db.Uuid
+  institutionId    String @db.Uuid
+  timetableEntryId String @db.Uuid
+  sessionId        String @unique @db.Uuid
+
+  sessionDate  DateTime @db.Date
+  startTime    DateTime @db.Time
+  endTime      DateTime @db.Time
+  topic        String?
+  notes        String?
+  isCancelled  Boolean  @default(false)
+  cancelledReason String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  institution Institution         @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  timetableEntry TimetableEntry  @relation(fields: [timetableEntryId], references: [id], onDelete: Cascade)
+  records       AttendanceRecord[]
+
+  @@unique([institutionId, timetableEntryId, sessionDate])
+  @@index([institutionId])
+  @@index([institutionId, timetableEntryId])
+  @@index([institutionId, sessionDate])
+  @@map("attendance_sessions")
+}
+
+/// Individual student attendance for a session.
+model AttendanceRecord {
+  id               String @id @default(uuid(7)) @db.Uuid
+  institutionId    String @db.Uuid
+  attendanceSessionId String @db.Uuid
+  studentId        String @db.Uuid
+
+  status     AttendanceStatus @default(ABSENT)
+  markedById String?  @db.Uuid
+  notes      String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  institution    Institution        @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  session        AttendanceSession  @relation(fields: [attendanceSessionId], references: [id], onDelete: Cascade)
+  student        Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  markedBy       User?              @relation(fields: [markedById], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, attendanceSessionId, studentId])
+  @@index([institutionId])
+  @@index([institutionId, studentId])
+  @@index([institutionId, attendanceSessionId])
+  @@map("attendance_records")
+}
+
+// ---------------------------------------------------------------------------
+// Assessment & results
+// ---------------------------------------------------------------------------
+
+/// A graded item (exam, assignment, quiz, etc.) linked to a unit and semester.
+model Assessment {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  unitId        String @db.Uuid
+  semesterId    String @db.Uuid
+
+  code         String
+  name         String
+  description  String?
+  type         AssessmentType @default(COURSEWORK)
+  maxScore     Float
+  weight       Float          @default(0)
+  status       AssessmentStatus @default(DRAFT)
+
+  dueDate      DateTime?
+  publishedAt  DateTime?
+  gradedAt     DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  unit        Unit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  semester    Semester     @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  marks       Mark[]
+
+  @@unique([institutionId, unitId, semesterId, code])
+  @@index([institutionId])
+  @@index([institutionId, unitId])
+  @@index([institutionId, semesterId])
+  @@map("assessments")
+}
+
+/// Individual student marks for an assessment.
+model Mark {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  assessmentId  String @db.Uuid
+  studentId     String @db.Uuid
+
+  score       Float?
+  percentage  Float?
+  grade       String?
+  status      MarkStatus @default(DRAFT)
+  feedback    String?
+  gradedById  String?  @db.Uuid
+  gradedAt    DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  assessment  Assessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gradedBy    User?        @relation(fields: [gradedById], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, assessmentId, studentId])
+  @@index([institutionId])
+  @@index([institutionId, studentId])
+  @@index([institutionId, assessmentId])
+  @@map("marks")
+}
+
+/// Aggregated result for a student in a unit for a semester.
+/// Calculated from marks and grading configuration.
+model Result {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  studentId     String @db.Uuid
+  unitId        String @db.Uuid
+  semesterId    String @db.Uuid
+
+  totalScore    Float?
+  percentage    Float?
+  grade         String?
+  gpa           Float?
+  status        ResultStatus @default(PENDING)
+  remarks       String?
+  calculatedAt  DateTime?
+  verifiedById  String?  @db.Uuid
+  verifiedAt    DateTime?
+  approvedById  String?  @db.Uuid
+  approvedAt    DateTime?
+  publishedAt   DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student     Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  unit        Unit         @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  semester    Semester     @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  verifiedBy  User?        @relation("ResultsVerified", fields: [verifiedById], references: [id], onDelete: SetNull)
+  approvedBy  User?        @relation("ResultsApproved", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([institutionId, studentId, unitId, semesterId])
+  @@index([institutionId])
+  @@index([institutionId, studentId])
+  @@index([institutionId, unitId])
+  @@index([institutionId, semesterId])
+  @@index([institutionId, status])
+  @@map("results")
+}
+
+// ---------------------------------------------------------------------------
 // Auditing
 // ---------------------------------------------------------------------------
 
@@ -927,3 +1333,360 @@ model AuditLog {
   @@index([actorUserId])
   @@map("audit_logs")
 }
+
+// ---------------------------------------------------------------------------
+// Finance
+// ---------------------------------------------------------------------------
+
+/// A fee structure defines what charges apply to a programme or cohort.
+model FeeStructure {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  programmeId   String? @db.Uuid
+  cohortId      String? @db.Uuid
+  academicYearId String? @db.Uuid
+
+  code        String
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution  Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  programme    Programme?  @relation(fields: [programmeId], references: [id], onDelete: SetNull)
+  cohort       Cohort?     @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: SetNull)
+  feeItems     FeeItem[]
+  invoices     Invoice[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId])
+  @@map("fee_structures")
+}
+
+/// Individual line items within a fee structure.
+model FeeItem {
+  id             String @id @default(uuid(7)) @db.Uuid
+  institutionId  String @db.Uuid
+  feeStructureId String @db.Uuid
+
+  code         String
+  name         String
+  description  String?
+  amount       Float
+  isMandatory  Boolean @default(true)
+  isRecurring  Boolean @default(false)
+  recurringPeriod String?  // e.g. "SEMESTER", "MONTH"
+  sortOrder    Int     @default(0)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution  Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  feeStructure FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+  invoiceItems InvoiceItem[]
+
+  @@unique([institutionId, feeStructureId, code])
+  @@index([institutionId])
+  @@index([institutionId, feeStructureId])
+  @@map("fee_items")
+}
+
+/// An invoice issued to a student for a set of fee items.
+model Invoice {
+  id             String @id @default(uuid(7)) @db.Uuid
+  institutionId  String @db.Uuid
+  feeStructureId String? @db.Uuid
+  studentId      String @db.Uuid
+  semesterId     String? @db.Uuid
+
+  invoiceNumber  String
+  status         InvoiceStatus @default(DRAFT)
+  subtotal       Float         @default(0)
+  discount       Float         @default(0)
+  tax            Float         @default(0)
+  total          Float         @default(0)
+  amountPaid     Float         @default(0)
+  balance        Float         @default(0)
+  currency       String        @default("KES")
+
+  dueDate        DateTime?
+  issuedAt       DateTime?
+  cancelledAt    DateTime?
+  cancelledReason String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution  Institution    @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  feeStructure FeeStructure?  @relation(fields: [feeStructureId], references: [id], onDelete: SetNull)
+  student      Student        @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  semester     Semester?      @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+  items        InvoiceItem[]
+  allocations  PaymentAllocation[]
+
+  @@unique([institutionId, invoiceNumber])
+  @@index([institutionId])
+  @@index([institutionId, studentId])
+  @@index([institutionId, status])
+  @@index([institutionId, semesterId])
+  @@map("invoices")
+}
+
+/// Line item on an invoice, referencing a fee item or ad-hoc charge.
+model InvoiceItem {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  invoiceId     String @db.Uuid
+  feeItemId     String? @db.Uuid
+
+  code         String
+  name         String
+  description  String?
+  quantity     Int      @default(1)
+  unitPrice    Float
+  discount     Float    @default(0)
+  total        Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  institution Institution  @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  feeItem     FeeItem?     @relation(fields: [feeItemId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId])
+  @@index([institutionId, invoiceId])
+  @@map("invoice_items")
+}
+
+/// A payment record against one or more invoices.
+model Payment {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  studentId     String @db.Uuid
+
+  paymentNumber String
+  reference     String?  // External reference (e.g. M-Pesa transaction ID)
+  method        PaymentMethod @default(CASH)
+  amount        Float
+  currency      String   @default("KES")
+  status        PaymentStatus @default(PENDING)
+
+  notes         String?
+  receivedAt    DateTime?
+  confirmedAt   DateTime?
+  confirmedById String?  @db.Uuid
+  voidedAt      DateTime?
+  voidedReason  String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  confirmedBy User?       @relation(fields: [confirmedById], references: [id], onDelete: SetNull)
+  allocations PaymentAllocation[]
+  receipts    Receipt[]
+
+  @@unique([institutionId, paymentNumber])
+  @@index([institutionId])
+  @@index([institutionId, studentId])
+  @@index([institutionId, status])
+  @@map("payments")
+}
+
+/// Maps a payment amount to a specific invoice.
+model PaymentAllocation {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  paymentId     String @db.Uuid
+  invoiceId     String @db.Uuid
+
+  amount      Float
+  allocatedAt DateTime @default(now())
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  payment     Payment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoice     Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, paymentId, invoiceId])
+  @@index([institutionId])
+  @@index([institutionId, paymentId])
+  @@index([institutionId, invoiceId])
+  @@map("payment_allocations")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String? @db.Uuid
+  recipientId   String @db.Uuid
+
+  title     String
+  body      String
+  kind      String  @default("INFO")
+  link      String?
+  isRead    Boolean @default(false)
+  readAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  recipient   User         @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([institutionId])
+  @@index([recipientId, isRead])
+  @@index([recipientId, createdAt])
+  @@map("notifications")
+}
+
+/// A receipt issued for a confirmed payment.
+model Receipt {
+  id            String @id @default(uuid(7)) @db.Uuid
+  institutionId String @db.Uuid
+  paymentId     String @db.Uuid
+
+  receiptNumber String
+  issuedAt      DateTime @default(now())
+  notes         String?
+
+  createdAt DateTime @default(now())
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  payment     Payment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([institutionId, receiptNumber])
+  @@index([institutionId])
+  @@index([institutionId, paymentId])
+  @@map("receipts")
+}
+
+// ---------------------------------------------------------------------------
+// Subscriptions (platform-level)
+// ---------------------------------------------------------------------------
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+  SUSPENDED
+}
+
+enum PlanInterval {
+  MONTHLY
+  YEARLY
+}
+
+/// Pricing plan available to institutions.
+model Plan {
+  id          String @id @default(uuid(7)) @db.Uuid
+  code        String @unique
+  name        String
+  description String?
+  isActive    Boolean @default(true)
+
+  /// Monthly price in the platform currency.
+  price       Float
+  interval    PlanInterval @default(MONTHLY)
+
+  /// Configurable limits. null = unlimited.
+  maxStudents Int?
+  maxStaff    Int?
+  maxStorageMb Int?
+  maxUnits    Int?
+
+  /// Feature flags enabled for this plan.
+  features    Json @default("[]")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  subscriptions Subscription[]
+
+  @@index([isActive])
+  @@map("plans")
+}
+
+/// Institution subscription to a plan.
+model Subscription {
+  id             String @id @default(uuid(7)) @db.Uuid
+  institutionId  String @unique @db.Uuid
+  planId         String @db.Uuid
+
+  status         SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  trialEnd      DateTime?
+  cancelledAt   DateTime?
+  cancelAtPeriodEnd Boolean @default(false)
+
+  /// Stripe/payment provider subscription ID.
+  externalId    String?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  plan        Plan        @relation(fields: [planId], references: [id], onDelete: Restrict)
+  events      SubscriptionEvent[]
+  usage       UsageRecord[]
+
+  @@index([planId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+/// Subscription lifecycle events (for audit trail).
+model SubscriptionEvent {
+  id             String @id @default(uuid(7)) @db.Uuid
+  subscriptionId String @db.Uuid
+
+  type         String   // e.g. "created", "plan_changed", "cancelled", "renewed", "payment_failed"
+  description  String?
+  metadata     Json     @default("{}")
+  performedById String? @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  performedBy  User?        @relation(fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([subscriptionId])
+  @@index([createdAt])
+  @@map("subscription_events")
+}
+
+/// Usage tracking for metered billing and limit enforcement.
+model UsageRecord {
+  id             String @id @default(uuid(7)) @db.Uuid
+  subscriptionId String @db.Uuid
+
+  /// What is being measured (e.g. "students", "staff", "storage_mb", "units").
+  metric        String
+  quantity      Int
+  /// The billing period this record belongs to.
+  periodStart   DateTime @db.Date
+  periodEnd     DateTime @db.Date
+
+  createdAt DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, metric, periodStart])
+  @@index([subscriptionId])
+  @@map("usage_records")
+}
+
